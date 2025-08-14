@@ -45,6 +45,9 @@ dependencies:
   cloud_firestore: ^6.0.0
   firebase_storage: ^13.0.0
   firebase_messaging: ^16.0.0
+    # الجديدة المطلوبة
+  google_sign_in: ^6.1.4
+  # sign_in_with_apple: ^5.0.0
   
   # Maps & Location
   flutter_map: any

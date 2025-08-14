@@ -566,11 +566,11 @@ class _CompleteProfileViewState extends State<CompleteProfileView> {
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
         profileImage: _profileImage.toString(),
-        carModel: _carModelController.text.trim(),
-        carPlate: _carPlateController.text.trim(),
-        licenseNumber: _licenseNumberController.text.trim(),
-        licenseImage: _licenseImage,
-        carImage: _carImage,
+        // carModel: _carModelController.text.trim(),
+        // carPlate: _carPlateController.text.trim(),
+        // licenseNumber: _licenseNumberController.text.trim(),
+        // licenseImage: _licenseImage,
+        // carImage: _carImage,
       );
     } catch (e) {
       Get.snackbar(

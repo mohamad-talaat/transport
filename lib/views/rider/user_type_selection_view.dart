@@ -6,47 +6,34 @@ import 'package:transport_app/models/user_model.dart';
 class UserTypeSelectionView extends StatelessWidget {
   final AuthController authController = Get.put(AuthController());
 
-    UserTypeSelectionView({super.key});
+  UserTypeSelectionView({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.blue.shade600,
-              Colors.blue.shade800,
-              Colors.blue.shade900,
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Column(
+            children: [
+              const SizedBox(height: 60),
+              
+              // Logo والعنوان
+              _buildHeader(),
+              
+              const Spacer(),
+              
+              // خيارات المستخدم
+              _buildUserOptions(),
+              
+              const Spacer(),
+              
+              // روابط التسجيل
+              _buildSignUpLinks(),
+              
+              const SizedBox(height: 40),
             ],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Logo والعنوان
-                  _buildHeader(),
-                  
-                  const SizedBox(height: 60),
-                  
-                  // خيارات نوع المستخدم
-                  _buildUserTypeOptions(),
-                  
-                  const SizedBox(height: 40),
-                  
-                  // نص توضيحي
-                  _buildDescription(),
-                ],
-              ),
-            ),
           ),
         ),
       ),
@@ -56,126 +43,350 @@ class UserTypeSelectionView extends StatelessWidget {
   Widget _buildHeader() {
     return Column(
       children: [
-        // Logo
+        // أيقونة التاكسي
         Container(
-          width: 120,
-          height: 120,
+          width: 100,
+          height: 100,
           decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
+            color: Colors.amber.shade400,
+            borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
+                color: Colors.amber.withOpacity(0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: Icon(
-            Icons.directions_car,
-            size: 60,
-            color: Colors.blue.shade600,
+          child: const Icon(
+            Icons.local_taxi,
+            size: 50,
+            color: Colors.white,
           ),
         ),
         
         const SizedBox(height: 24),
         
-        // عنوان التطبيق
+        // العنوان
         const Text(
-          'تطبيق النقل',
+          'تكسي البصرة',
           style: TextStyle(
             fontSize: 32,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: Colors.black87,
           ),
         ),
         
         const SizedBox(height: 8),
         
         const Text(
-          'اختر نوع حسابك للبدء',
+          'مرحباً بك',
           style: TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
+            fontSize: 18,
+            color: Colors.grey,
+          ),
+        ),
+        
+        const SizedBox(height: 4),
+        
+        const Text(
+          'سجل الدخول للاستمتاع بخدماتنا',
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildUserTypeOptions() {
+  Widget _buildUserOptions() {
     return Column(
       children: [
-        // خيار الراكب
-        _buildUserTypeCard(
-          userType: UserType.rider,
-          title: 'راكب',
-          subtitle: 'احجز رحلتك بسهولة',
-          icon: Icons.person,
-          gradient: LinearGradient(
-            colors: [Colors.green.shade400, Colors.green.shade600],
-          ),
-        ),
+        // تسجيل الدخول بـ Google
+        _buildGoogleSignInButton(),
         
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         
-        // خيار السائق
-        _buildUserTypeCard(
-          userType: UserType.driver,
-          title: 'سائق',
-          subtitle: 'ابدأ العمل واكسب المال',
-          icon: Icons.drive_eta,
-          gradient: LinearGradient(
-            colors: [Colors.orange.shade400, Colors.orange.shade600],
-          ),
-        ),
+        // تسجيل الدخول بـ Apple
+        _buildAppleSignInButton(),
       ],
     );
   }
 
-  Widget _buildUserTypeCard({
-    required UserType userType,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Gradient gradient,
-  }) {
-    return GestureDetector(
-      onTap: () => authController.selectUserType(userType),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          gradient: gradient,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
+  Widget _buildGoogleSignInButton() {
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ElevatedButton(
+        onPressed: () {
+          _showUserTypeDialog('google');
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // أيقونة Google
+            Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+              child: const Center(
+                child: Text(
+                  'G',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'تسجيل الدخول باستخدام Google',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
-        child: Row(
+      ),
+    );
+  }
+
+  Widget _buildAppleSignInButton() {
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: ElevatedButton(
+        onPressed: () {
+          _showUserTypeDialog('apple');
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // أيقونة
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: Colors.white,
-                size: 30,
+            // أيقونة Apple
+            Icon(
+              Icons.apple,
+              size: 20,
+              color: Colors.white,
+            ),
+            SizedBox(width: 12),
+            Text(
+              'تسجيل الدخول باستخدام Apple',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            
-            const SizedBox(width: 20),
-            
-            // النص
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignUpLinks() {
+    return Column(
+      children: [
+        // تسجيل الدخول بالهاتف (قريباً)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.phone, size: 18, color: Colors.grey.shade600),
+              const SizedBox(width: 8),
+              Text(
+                'تسجيل الدخول بالهاتف',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  'قريباً',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange.shade700,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+        
+        // تسجيل حساب جديد
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'ليس لديك حساب؟ ',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey,
+              ),
+            ),
+            GestureDetector(
+              onTap: () {
+                _showUserTypeDialog('signup');
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.blue),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'إنشاء حساب جديد',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _showUserTypeDialog(String loginType) {
+    Get.dialog(
+      AlertDialog(
+        title: const Text(
+          'اختر نوع الحساب',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildDialogOption(
+              'راكب',
+              'للحجز والاستمتاع بالرحلات',
+              Icons.person,
+              Colors.green,
+              UserType.rider,
+              loginType,
+            ),
+            const SizedBox(height: 16),
+            _buildDialogOption(
+              'سائق',
+              'للعمل وكسب المال',
+              Icons.drive_eta,
+              Colors.blue,
+              UserType.driver,
+              loginType,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('إلغاء'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDialogOption(
+    String title,
+    String subtitle,
+    IconData icon,
+    Color color,
+    UserType userType,
+    String loginType,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        Get.back();
+        authController.selectUserTypeForSocialLogin(userType);
+        
+        // تنفيذ نوع تسجيل الدخول المحدد
+        switch (loginType) {
+          case 'google':
+            authController.signInWithGoogle();
+            break;
+          // case 'apple':
+          //   authController.signInWithApple();
+            break;
+          case 'signup':
+            // TODO: يمكن إضافة صفحة التسجيل لاحقاً
+            Get.snackbar(
+              'قريباً',
+              'إنشاء الحساب بطرق أخرى سيكون متاحاً قريباً',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.orange,
+              colorText: Colors.white,
+            );
+            break;
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,85 +394,23 @@ class UserTypeSelectionView extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      fontSize: 24,
+                      fontSize: 16,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
+                      fontSize: 12,
+                      color: Colors.grey,
                     ),
                   ),
                 ],
               ),
             ),
-            
-            // سهم
-            const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.white,
-              size: 20,
-            ),
+            const Icon(Icons.arrow_forward_ios, size: 16),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDescription() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.2),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'مميزات التطبيق:',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _buildFeatureItem('حجز سريع وآمن'),
-          _buildFeatureItem('تتبع مباشر للرحلة'),
-          _buildFeatureItem('دفع إلكتروني آمن'),
-          _buildFeatureItem('تقييم الخدمة'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeatureItem(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.check_circle,
-            color: Colors.green.shade300,
-            size: 16,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.white70,
-            ),
-          ),
-        ],
       ),
     );
   }

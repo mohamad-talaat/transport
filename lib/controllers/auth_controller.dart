@@ -1,18 +1,21 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:transport_app/main.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+ import 'package:transport_app/main.dart';
 import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
 
+import '../views/rider/location_permission_screen.dart';
+ 
 class AuthController extends GetxController {
   static AuthController get to => Get.find();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   // User state
   final Rx<User?> _firebaseUser = Rx<User?>(null);
@@ -107,114 +110,62 @@ class AuthController extends GetxController {
 
   /// التنقل إلى الصفحة الرئيسية حسب نوع المستخدم
   void navigateToHome() {
-    if (currentUser.value?.userType == UserType.rider) {
-      Get.offAllNamed(AppRoutes.RIDER_HOME);
-    } else if (currentUser.value?.userType == UserType.driver) {
-      Get.offAllNamed(AppRoutes.DRIVER_HOME);
-    } else {
-      // لا يوجد نوع مستخدم محدد
-      Get.offAllNamed(AppRoutes.COMPLETE_PROFILE);
-    }
+    // أولاً طلب إذن الموقع
+    _showLocationPermissionDialog();
   }
 
-  /// تحديد نوع المستخدم
+  /// عرض نافذة طلب إذن الموقع
+  void _showLocationPermissionDialog() {
+    Get.dialog(
+      LocationPermissionScreen(
+        onPermissionGranted: () {
+          // الانتقال للصفحة الرئيسية بعد الحصول على الإذن
+          if (currentUser.value?.userType == UserType.rider) {
+            Get.offAllNamed(AppRoutes.RIDER_HOME);
+          } else if (currentUser.value?.userType == UserType.driver) {
+            Get.offAllNamed(AppRoutes.DRIVER_HOME);
+          }
+        },
+        onPermissionDenied: () {
+          // الانتقال للصفحة الرئيسية حتى لو تم رفض الإذن
+          if (currentUser.value?.userType == UserType.rider) {
+            Get.offAllNamed(AppRoutes.RIDER_HOME);
+          } else if (currentUser.value?.userType == UserType.driver) {
+            Get.offAllNamed(AppRoutes.DRIVER_HOME);
+          }
+        },
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  /// تحديد نوع المستخدم للتسجيل الاجتماعي
+  void selectUserTypeForSocialLogin(UserType type) {
+    selectedUserType.value = type;
+  }
+
+  /// تحديد نوع المستخدم للهاتف (قريباً)
   void selectUserType(UserType type) {
     selectedUserType.value = type;
-    Get.toNamed(AppRoutes.PHONE_AUTH);
+    // TODO: سيتم تفعيل تسجيل الهاتف لاحقاً
+    Get.snackbar(
+      'قريباً',
+      'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+    );
   }
 
-  /// إرسال رمز التحقق
-  Future<void> sendOTP() async {
-    if (phoneController.text.trim().isEmpty) {
+  /// تسجيل الدخول بـ Google
+  Future<void> signInWithGoogle() async {
+    if (selectedUserType.value == null) {
       Get.snackbar(
         'خطأ',
-        'يرجى إدخال رقم الهاتف',
+        'يرجى اختيار نوع المستخدم أولاً',
         snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    String phone = _formatPhoneNumber(phoneController.text.trim());
-    phoneNumber.value = phone;
-
-    try {
-      isLoading.value = true;
-
-      await _auth.verifyPhoneNumber(
-        phoneNumber: phone,
-        verificationCompleted: (PhoneAuthCredential credential) async {
-          // التحقق التلقائي (Android only)
-          await signInWithCredential(credential);
-        },
-        verificationFailed: (FirebaseAuthException e) {
-          isLoading.value = false;
-          String message;
-          
-          switch (e.code) {
-            case 'invalid-phone-number':
-              message = 'رقم الهاتف غير صحيح';
-              break;
-            case 'too-many-requests':
-              message = 'تم تجاوز عدد المحاولات المسموح';
-              break;
-            default:
-              message = 'فشل في إرسال رمز التحقق';
-          }
-          
-          Get.snackbar(
-            'خطأ',
-            message,
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-        },
-        codeSent: (String verificationId, int? resendToken) {
-          isLoading.value = false;
-          this.verificationId.value = verificationId;
-          
-          Get.toNamed(AppRoutes.VERIFY_OTP);
-          
-          Get.snackbar(
-            'تم الإرسال',
-            'تم إرسال رمز التحقق إلى $phone',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.green,
-            colorText: Colors.white,
-          );
-        },
-        codeAutoRetrievalTimeout: (String verificationId) {
-          this.verificationId.value = verificationId;
-        },
-        timeout: const Duration(seconds: 60),
-      );
-    } catch (e) {
-      isLoading.value = false;
-      logger.w('خطأ في إرسال OTP: $e');
-      Get.snackbar(
-        'خطأ',
-        'حدث خطأ غير متوقع',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
-  }
-
-  /// التحقق من رمز OTP
-  Future<void> verifyOTP(String otp) async {
-    if (otpController.text.trim().isEmpty) {
-      Get.snackbar(
-        'خطأ',
-        'يرجى إدخال رمز التحقق',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    if (verificationId.value.isEmpty) {
-      Get.snackbar(
-        'خطأ',
-        'يرجى طلب رمز التحقق أولاً',
-        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
       );
       return;
     }
@@ -222,35 +173,37 @@ class AuthController extends GetxController {
     try {
       isLoading.value = true;
 
-      PhoneAuthCredential credential = PhoneAuthProvider.credential(
-        verificationId: verificationId.value,
-        smsCode: otpController.text.trim(),
-      );
-
-      await signInWithCredential(credential);
-    } catch (e) {
-      isLoading.value = false;
-      logger.w('خطأ في التحقق من OTP: $e');
+      // تسجيل الدخول بـ Google
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       
-      String message;
-      if (e is FirebaseAuthException) {
-        switch (e.code) {
-          case 'invalid-verification-code':
-            message = 'رمز التحقق غير صحيح';
-            break;
-          case 'invalid-verification-id':
-            message = 'انتهت صلاحية رمز التحقق';
-            break;
-          default:
-            message = 'فشل في التحقق من الرمز';
-        }
-      } else {
-        message = 'حدث خطأ غير متوقع';
+      if (googleUser == null) {
+        isLoading.value = false;
+        return; // المستخدم ألغى العملية
       }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // تسجيل الدخول في Firebase
+      UserCredential result = await _auth.signInWithCredential(credential);
       
+      if (result.user != null) {
+        await _handleSuccessfulLogin(result.user!, {
+          'name': googleUser.displayName ?? '',
+          'email': googleUser.email,
+          'profileImage': googleUser.photoUrl,
+        });
+      }
+    } catch (e) {
+      isLoading.value = false;
+      logger.w('خطأ في تسجيل الدخول بـ Google: $e');
       Get.snackbar(
         'خطأ',
-        message,
+        'فشل في تسجيل الدخول بـ Google',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
@@ -258,30 +211,147 @@ class AuthController extends GetxController {
     }
   }
 
-  /// تسجيل الدخول باستخدام Credential
-  Future<void> signInWithCredential(PhoneAuthCredential credential) async {
-    try {
-      UserCredential result = await _auth.signInWithCredential(credential);
+  // /// تسجيل الدخول بـ Apple
+  // Future<void> signInWithApple() async {
+  //   if (selectedUserType.value == null) {
+  //     Get.snackbar(
+  //       'خطأ',
+  //       'يرجى اختيار نوع المستخدم أولاً',
+  //       snackPosition: SnackPosition.BOTTOM,
+  //       backgroundColor: Colors.red,
+  //       colorText: Colors.white,
+  //     );
+  //     return;
+  //   }
+
+  //   try {
+  //     isLoading.value = true;
+
+  //     final credential = await SignInWithApple.getAppleIDCredential(
+  //       scopes: [
+  //         AppleIDAuthorizationScopes.email,
+  //         AppleIDAuthorizationScopes.fullName,
+  //       ],
+  //     );
+
+  //     final oauthCredential = OAuthProvider("apple.com").credential(
+  //       idToken: credential.identityToken,
+  //       accessToken: credential.authorizationCode,
+  //     );
+
+  //     UserCredential result = await _auth.signInWithCredential(oauthCredential);
       
-      if (result.user != null) {
-        // تحميل بيانات المستخدم
-        await loadUserData(result.user!.uid);
+  //     if (result.user != null) {
+  //       String displayName = '';
+  //       if (credential.givenName != null && credential.familyName != null) {
+  //         displayName = '${credential.givenName} ${credential.familyName}';
+  //       }
         
-        if (currentUser.value == null) {
-          // مستخدم جديد - الانتقال لإكمال البيانات
-          Get.offAllNamed(AppRoutes.COMPLETE_PROFILE);
-        } else {
-          // مستخدم موجود - الانتقال للصفحة الرئيسية
-          isLoggedIn.value = true;
-          navigateToHome();
-        }
+  //       await _handleSuccessfulLogin(result.user!, {
+  //         'name': displayName,
+  //         'email': credential.email ?? result.user!.email ?? '',
+  //       });
+  //     }
+  //   } catch (e) {
+  //     isLoading.value = false;
+  //     logger.w('خطأ في تسجيل الدخول بـ Apple: $e');
+  //     Get.snackbar(
+  //       'خطأ',
+  //       'فشل في تسجيل الدخول بـ Apple',
+  //       snackPosition: SnackPosition.BOTTOM,
+  //       backgroundColor: Colors.red,
+  //       colorText: Colors.white,
+  //     );
+  //   }
+  // }
+
+  /// معالجة تسجيل الدخول الناجح
+  Future<void> _handleSuccessfulLogin(User firebaseUser, Map<String, dynamic> userInfo) async {
+    try {
+      // تحميل بيانات المستخدم
+      await loadUserData(firebaseUser.uid);
+      
+      if (currentUser.value == null) {
+        // مستخدم جديد - إنشاء حساب
+        UserModel newUser = UserModel(
+          id: firebaseUser.uid,
+          name: userInfo['name'] ?? 'مستخدم جديد',
+          phone: firebaseUser.phoneNumber ?? '',
+          email: userInfo['email'] ?? firebaseUser.email ?? '',
+          profileImage: userInfo['profileImage'],
+          userType: selectedUserType.value!,
+          createdAt: DateTime.now(),
+        );
+
+        // حفظ البيانات في Firestore
+        await _firestore
+            .collection('users')
+            .doc(newUser.id)
+            .set(newUser.toMap());
+
+        currentUser.value = newUser;
+        
+        Get.snackbar(
+          'مرحباً بك',
+          'تم إنشاء حسابك بنجاح',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          'أهلاً وسهلاً',
+          'مرحباً بعودتك ${currentUser.value!.name}',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
       }
+      
+      isLoggedIn.value = true;
+      navigateToHome();
+      
     } catch (e) {
-      logger.w('خطأ في تسجيل الدخول: $e');
-      rethrow;
+      logger.w('خطأ في معالجة تسجيل الدخول: $e');
+      Get.snackbar(
+        'خطأ',
+        'فشل في حفظ بيانات المستخدم',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
       isLoading.value = false;
     }
+  }
+
+  /// إرسال رمز التحقق (للاستخدام المستقبلي)
+  Future<void> sendOTP() async {
+    // TODO: سيتم تفعيله لاحقاً
+    Get.snackbar(
+      'قريباً',
+      'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+    );
+  }
+
+  /// التحقق من رمز OTP (للاستخدام المستقبلي)
+  Future<void> verifyOTP(String otp) async {
+    // TODO: سيتم تفعيله لاحقاً
+    Get.snackbar(
+      'قريباً',
+      'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+    );
+  }
+
+  /// تسجيل الدخول بـ Credential (للاستخدام المستقبلي)
+  Future<void> signInWithCredential(PhoneAuthCredential credential) async {
+    // TODO: سيتم تفعيله لاحقاً
   }
 
   /// إكمال الملف الشخصي
@@ -290,11 +360,6 @@ class AuthController extends GetxController {
     required String email,
     String? profileImage,
     Map<String, dynamic>? additionalData,
-    required String carPlate,
-    required String carModel,
-    File? licenseImage,
-    required String licenseNumber,
-    File? carImage,
   }) async {
     if (_auth.currentUser == null) {
       Get.snackbar(
@@ -405,6 +470,11 @@ class AuthController extends GetxController {
   /// تسجيل الخروج
   Future<void> signOut() async {
     try {
+      // تسجيل الخروج من Google إذا كان مسجل دخول
+      if (await _googleSignIn.isSignedIn()) {
+        await _googleSignIn.signOut();
+      }
+      
       await _auth.signOut();
       currentUser.value = null;
       isLoggedIn.value = false;
@@ -423,33 +493,30 @@ class AuthController extends GetxController {
     }
   }
 
-  /// إعادة إرسال رمز التحقق
+  /// إعادة إرسال رمز التحقق (للاستخدام المستقبلي)
   Future<void> resendOTP() async {
-    if (phoneNumber.value.isEmpty) {
-      Get.snackbar(
-        'خطأ',
-        'يرجى إدخال رقم الهاتف أولاً',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    await sendOTP();
+    Get.snackbar(
+      'قريباً',
+      'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.orange,
+      colorText: Colors.white,
+    );
   }
 
-  /// تنسيق رقم الهاتف
+  /// تنسيق رقم الهاتف (للعراق)
   String _formatPhoneNumber(String phone) {
     // إزالة أي مسافات أو رموز
     phone = phone.replaceAll(RegExp(r'[^\d]'), '');
     
-    // إضافة رمز الدولة إذا لم يكن موجود
-    if (!phone.startsWith('+20')) {
-      if (phone.startsWith('20')) {
+    // إضافة رمز العراق إذا لم يكن موجود
+    if (!phone.startsWith('+964')) {
+      if (phone.startsWith('964')) {
         phone = '+$phone';
       } else if (phone.startsWith('0')) {
-        phone = '+2$phone';
+        phone = '+964${phone.substring(1)}';
       } else {
-        phone = '+20$phone';
+        phone = '+964$phone';
       }
     }
     

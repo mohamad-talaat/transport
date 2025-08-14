@@ -8,43 +8,42 @@ import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
 import 'package:transport_app/services/notification_service.dart';
 import 'package:logger/logger.dart';
- 
- var logger = Logger(
+
+var logger = Logger(
   printer: PrettyPrinter(),
-); 
+);
 
 // var loggerNoStack = Logger(
 //   printer: PrettyPrinter(methodCount: 0),
 // );
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // تهيئة Firebase
 
-await Firebase.initializeApp(
-  // options: DefaultFirebaseOptions.currentPlatform,
-);  
+  await Firebase.initializeApp(
+      // options: DefaultFirebaseOptions.currentPlatform,
+      );
   // تهيئة الخدمات
   await initServices();
-  
+
   runApp(const MyApp());
 }
 
 Future<void> initServices() async {
   try {
     // تهيئة الخدمات الأساسية بالترتيب الصحيح
-    
+
     // 1. AppController (يجب أن يكون الأول)
     Get.put(AppController());
-    
+
     // 2. NotificationService
     await Get.putAsync(() => NotificationService().init());
-    
+
     // 3. LocationService
     await Get.putAsync(() => LocationService().init());
-    
+
     logger.i('تم تهيئة جميع الخدمات بنجاح');
-    
   } catch (e) {
     logger.i('خطأ في تهيئة الخدمات: $e');
   }
@@ -81,57 +80,54 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Obx(() => GetMaterialApp(
-      title: 'تطبيق النقل',
-      debugShowCheckedModeBanner: false,
-      
-      // الثيم
-      theme: _getLightTheme(),
-      darkTheme: _getDarkTheme(),
-      themeMode: appController.isDarkMode.value 
-          ? ThemeMode.dark 
-          : ThemeMode.light,
-      
-      // اللغة والتوطين
-      locale: appController.currentLocale.value,
-      fallbackLocale: const Locale('en', 'US'),
-      
-      // الصفحات والتوجيه
-      initialRoute: AppRoutes.SPLASH,
-      getPages: AppPages.routes,
-      
-      // اتجاه النص
-      builder: (context, child) {
-        return Directionality(
-          textDirection: appController.currentLanguage.value == 'ar' 
-              ? TextDirection.rtl 
-              : TextDirection.ltr,
-          child: _buildAppWrapper(child!),
-        );
-      },
-      
-      // معالج الأخطاء غير المتوقعة
-      unknownRoute: GetPage(
-        name: '/not-found',
-        page: () => _buildNotFoundPage(),
-      ),
-    ));
+          title: 'تطبيق النقل',
+          debugShowCheckedModeBanner: false,
+
+          // الثيم
+          theme: _getLightTheme(),
+          darkTheme: _getDarkTheme(),
+          themeMode:
+              appController.isDarkMode.value ? ThemeMode.dark : ThemeMode.light,
+
+          // اللغة والتوطين
+          locale: appController.currentLocale.value,
+          fallbackLocale: const Locale('en', 'US'),
+
+          // الصفحات والتوجيه
+          initialRoute: AppRoutes.SPLASH,
+          getPages: AppPages.routes,
+
+          // اتجاه النص
+          builder: (context, child) {
+            return Directionality(
+              textDirection: appController.currentLanguage.value == 'ar'
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+              child: _buildAppWrapper(child!),
+            );
+          },
+
+          // معالج الأخطاء غير المتوقعة
+          unknownRoute: GetPage(
+            name: '/not-found',
+            page: () => _buildNotFoundPage(),
+          ),
+        ));
   }
 
   /// إنشاء wrapper للتطبيق مع شاشة التحميل العامة
   Widget _buildAppWrapper(Widget child) {
     return Obx(() => Stack(
-      children: [
-        child,
-        
-        // شاشة التحميل العامة
-        if (appController.isLoading.value)
-          _buildGlobalLoadingOverlay(),
-        
-        // شاشة عدم الاتصال
-        if (!appController.isConnected.value)
-          _buildOfflineOverlay(),
-      ],
-    ));
+          children: [
+            child,
+
+            // شاشة التحميل العامة
+            if (appController.isLoading.value) _buildGlobalLoadingOverlay(),
+
+            // شاشة عدم الاتصال
+            if (!appController.isConnected.value) _buildOfflineOverlay(),
+          ],
+        ));
   }
 
   /// شاشة التحميل العامة
@@ -151,13 +147,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               const CircularProgressIndicator(),
               const SizedBox(height: 16),
               Obx(() => Text(
-                appController.loadingMessage.value,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-              )),
+                    appController.loadingMessage.value,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  )),
             ],
           ),
         ),
@@ -190,12 +186,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 ),
               ),
               Obx(() => Text(
-                _getConnectionTypeText(appController.connectionType.value),
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                ),
-              )),
+                    _getConnectionTypeText(appController.connectionType.value),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  )),
             ],
           ),
         ),
@@ -265,13 +261,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       primarySwatch: Colors.blue,
       primaryColor: Colors.blue,
       fontFamily: 'Cairo',
-      
+
       // ألوان أساسية
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.blue,
         brightness: Brightness.light,
       ),
-      
+
       // نصوص
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontSize: 16),
@@ -280,14 +276,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         titleSmall: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
-      
+
       // شريط التطبيق
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      
+
       // الأزرار
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -297,21 +293,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
         ),
       ),
-      
+
       // البطاقات
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
+
       // حقول الإدخال
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       ),
     );
   }
@@ -324,13 +321,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       primarySwatch: Colors.blue,
       primaryColor: Colors.blue,
       fontFamily: 'Cairo',
-      
+
       // ألوان أساسية
       colorScheme: ColorScheme.fromSeed(
         seedColor: Colors.blue,
         brightness: Brightness.dark,
       ),
-      
+
       // نصوص
       textTheme: const TextTheme(
         bodyLarge: TextStyle(fontSize: 16),
@@ -339,14 +336,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
         titleSmall: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
       ),
-      
+
       // شريط التطبيق
       appBarTheme: const AppBarTheme(
         centerTitle: true,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      
+
       // الأزرار
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -356,21 +353,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ),
         ),
       ),
-      
+
       // البطاقات
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         elevation: 4,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
-      
+
       // حقول الإدخال
       inputDecorationTheme: InputDecorationTheme(
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
         ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding:
+            const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
       ),
     );
   }

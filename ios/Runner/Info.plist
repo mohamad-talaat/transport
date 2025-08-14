@@ -4,6 +4,10 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>UIBackgroundModes</key>
+<array>
+  <string>location</string>
+</array>
 	<key>CFBundleDisplayName</key>
 	<string>Aaaaa</string>
 	<key>CFBundleExecutable</key>

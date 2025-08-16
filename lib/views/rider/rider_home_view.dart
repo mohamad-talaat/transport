@@ -11,7 +11,8 @@ import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
 
 class RiderHomeView extends StatelessWidget {
-  final MapControllerr mapController = Get.find();
+  final MapControllerr mapController = Get.put(MapControllerr());
+  
   final TripController tripController = Get.find();
   final AuthController authController = Get.find();
 

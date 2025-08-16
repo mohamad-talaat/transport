@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
- import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,11 +12,11 @@ class NotificationService extends GetxService {
 
   FirebaseMessaging? _firebaseMessaging;
   FlutterLocalNotificationsPlugin? _localNotifications;
-  
+
   // قائمة الإشعارات المحلية
   final RxList<AppNotification> notifications = <AppNotification>[].obs;
   final RxInt unreadCount = 0.obs;
-  
+
   // إعدادات الإشعارات
   final RxBool notificationsEnabled = true.obs;
   final RxBool soundEnabled = true.obs;
@@ -36,16 +36,21 @@ class NotificationService extends GetxService {
   Future<void> _initFirebaseMessaging() async {
     try {
       _firebaseMessaging = FirebaseMessaging.instance;
-      
+
       // الحصول على FCM Token
       String? token = await _firebaseMessaging!.getToken();
       logger.e('FCM Token: $token');
       // إرسال التوكن للخادم
-      await _sendTokenToServer(token!);
-          
+      if (token != null) {
+        await _sendTokenToServer(token);
+      }
+
       // مراقبة تحديث التوكن
-      _firebaseMessaging!.onTokenRefresh.listen(_sendTokenToServer);
-      
+      _firebaseMessaging!.onTokenRefresh.listen((newToken) {
+        if (newToken != null) {
+          _sendTokenToServer(newToken);
+        }
+      });
     } catch (e) {
       logger.e('خطأ في تهيئة Firebase Messaging: $e');
     }
@@ -55,29 +60,28 @@ class NotificationService extends GetxService {
   Future<void> _initLocalNotifications() async {
     try {
       _localNotifications = FlutterLocalNotificationsPlugin();
-      
+
       // إعدادات Android
-      const AndroidInitializationSettings androidSettings = 
+      const AndroidInitializationSettings androidSettings =
           AndroidInitializationSettings('@mipmap/ic_launcher');
-      
+
       // إعدادات iOS
-      const DarwinInitializationSettings iosSettings = 
+      const DarwinInitializationSettings iosSettings =
           DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-      
+
       const InitializationSettings initSettings = InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       );
-      
+
       await _localNotifications!.initialize(
         initSettings,
         onDidReceiveNotificationResponse: _handleNotificationTap,
       );
-      
     } catch (e) {
       logger.e('خطأ في تهيئة Local Notifications: $e');
     }
@@ -87,20 +91,21 @@ class NotificationService extends GetxService {
   Future<void> _requestPermissions() async {
     try {
       // أذونات Firebase
-      NotificationSettings settings = await _firebaseMessaging!.requestPermission(
+      NotificationSettings settings =
+          await _firebaseMessaging!.requestPermission(
         alert: true,
         badge: true,
         provisional: false,
         sound: true,
       );
-      
+
       logger.e('إعدادات الإشعارات: ${settings.authorizationStatus}');
-      
+
       // أذونات Local Notifications للأندرويد
       await _localNotifications!
-          .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
           ?.requestNotificationsPermission();
-          
     } catch (e) {
       logger.e('خطأ في طلب الأذونات: $e');
     }
@@ -110,26 +115,22 @@ class NotificationService extends GetxService {
   void _setupMessageHandlers() {
     // رسالة عندما يكون التطبيق في المقدمة
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    
+
     // رسالة عند النقر والتطبيق في الخلفية
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
-    
+
     // رسالة عند فتح التطبيق من إشعار
-    FirebaseMessaging.instance
-        .getInitialMessage()
-        .then((message) {
+    FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) {
         _handleMessageOpenedApp(message);
       }
     });
-    
- 
   }
 
   /// معالج الرسائل في المقدمة
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     logger.e('رسالة في المقدمة: ${message.messageId}');
-    
+
     // إنشاء إشعار محلي
     await _showLocalNotification(
       id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -137,7 +138,7 @@ class NotificationService extends GetxService {
       body: message.notification?.body ?? '',
       data: message.data,
     );
-    
+
     // إضافة للقائمة
     _addNotification(AppNotification.fromFirebaseMessage(message));
   }
@@ -145,7 +146,7 @@ class NotificationService extends GetxService {
   /// معالج النقر على الإشعار
   Future<void> _handleMessageOpenedApp(RemoteMessage message) async {
     logger.e('تم فتح الإشعار: ${message.messageId}');
-    
+
     // التنقل حسب نوع الإشعار
     final data = message.data;
     if (data.isNotEmpty) {
@@ -162,8 +163,9 @@ class NotificationService extends GetxService {
   }) async {
     try {
       if (!notificationsEnabled.value) return;
-      
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
         'transport_app_channel',
         'تطبيق النقل',
         channelDescription: 'إشعارات تطبيق النقل',
@@ -174,18 +176,18 @@ class NotificationService extends GetxService {
         playSound: true,
         icon: '@mipmap/ic_launcher',
       );
-      
+
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
       );
-      
+
       const NotificationDetails platformDetails = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       );
-      
+
       await _localNotifications!.show(
         id,
         title,
@@ -193,7 +195,6 @@ class NotificationService extends GetxService {
         platformDetails,
         payload: data != null ? jsonEncode(data) : null,
       );
-      
     } catch (e) {
       logger.e('خطأ في عرض الإشعار: $e');
     }
@@ -215,7 +216,7 @@ class NotificationService extends GetxService {
   void _handleNotificationNavigation(Map<String, dynamic> data) {
     final type = data['type'];
     final route = data['route'];
-    
+
     switch (type) {
       case 'trip_update':
         Get.toNamed('/trip-tracking', arguments: data);
@@ -238,11 +239,10 @@ class NotificationService extends GetxService {
     try {
       // TODO: إرسال التوكن لـ API الخاص بك
       logger.e('إرسال التوكن للخادم: $token');
-      
+
       // حفظ التوكن محلياً
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', token);
-      
     } catch (e) {
       logger.e('خطأ في إرسال التوكن: $e');
     }
@@ -276,9 +276,9 @@ class NotificationService extends GetxService {
         type: NotificationType.adminMessage,
         autoDelete: true, // حذف تلقائي بعد 24 ساعة
       );
-      
+
       _addNotification(notification);
-      
+
       // عرض إشعار محلي
       await _showLocalNotification(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -286,7 +286,6 @@ class NotificationService extends GetxService {
         body: message,
         data: data,
       );
-      
     } catch (e) {
       logger.e('خطأ في إرسال رسالة الإدارة: $e');
     }
@@ -313,16 +312,15 @@ class NotificationService extends GetxService {
         isRead: false,
         type: NotificationType.tripUpdate,
       );
-      
+
       _addNotification(notification);
-      
+
       await _showLocalNotification(
         id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
         title: title,
         body: message,
         data: notification.data,
       );
-      
     } catch (e) {
       logger.e('خطأ في إشعار الرحلة: $e');
     }
@@ -384,12 +382,12 @@ class NotificationService extends GetxService {
         final diff = now.difference(notification.timestamp).inHours;
         return diff >= 24;
       }
-      
+
       // حذف الإشعارات العادية بعد أسبوع
       final diff = now.difference(notification.timestamp).inDays;
       return diff >= 7;
     });
-    
+
     _saveNotifications();
   }
 
@@ -409,13 +407,13 @@ class NotificationService extends GetxService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final notificationsStr = prefs.getString('notifications');
-      
+
       if (notificationsStr != null) {
         final List<dynamic> notificationsJson = jsonDecode(notificationsStr);
         notifications.value = notificationsJson
             .map((json) => AppNotification.fromJson(json))
             .toList();
-        
+
         unreadCount.value = notifications.where((n) => !n.isRead).length;
       }
     } catch (e) {
@@ -430,17 +428,17 @@ class NotificationService extends GetxService {
     bool? vibration,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    
+
     if (enabled != null) {
       notificationsEnabled.value = enabled;
       await prefs.setBool('notifications_enabled', enabled);
     }
-    
+
     if (sound != null) {
       soundEnabled.value = sound;
       await prefs.setBool('notifications_sound', sound);
     }
-    
+
     if (vibration != null) {
       vibrationEnabled.value = vibration;
       await prefs.setBool('notifications_vibration', vibration);
@@ -483,7 +481,8 @@ class AppNotification {
       id: message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
       title: message.notification?.title ?? 'إشعار جديد',
       body: message.notification?.body ?? '',
-      imageUrl: message.notification?.android?.imageUrl ?? message.notification?.apple?.imageUrl,
+      imageUrl: message.notification?.android?.imageUrl ??
+          message.notification?.apple?.imageUrl,
       data: message.data,
       timestamp: DateTime.now(),
       isRead: false,
@@ -492,7 +491,8 @@ class AppNotification {
     );
   }
 
-  static NotificationType _getNotificationTypeFromData(Map<String, dynamic> data) {
+  static NotificationType _getNotificationTypeFromData(
+      Map<String, dynamic> data) {
     switch (data['type']) {
       case 'trip_update':
         return NotificationType.tripUpdate;

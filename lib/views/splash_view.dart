@@ -107,6 +107,9 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
+      // انتظار تحميل البيانات المحفوظة
+      await Future.delayed(const Duration(milliseconds: 500));
+
       // التحقق من حالة المستخدم
       final user = authController.currentUser.value;
 

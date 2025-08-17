@@ -4,12 +4,13 @@ import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
- import 'package:transport_app/main.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../views/rider/location_permission_screen.dart';
- 
+
 class AuthController extends GetxController {
   static AuthController get to => Get.find();
 
@@ -22,7 +23,7 @@ class AuthController extends GetxController {
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
   final RxBool isLoggedIn = false.obs;
   final RxBool isLoading = false.obs;
-  
+
   // Control flag to prevent multiple initializations
   bool _isInitialized = false;
 
@@ -46,11 +47,14 @@ class AuthController extends GetxController {
   /// تهيئة الـ Controller بشكل آمن
   Future<void> _initializeController() async {
     if (_isInitialized) return;
-    
+
     try {
+      // تحميل حالة تسجيل الدخول المحفوظة
+      await _loadLoginState();
+
       // تحديث الـ Firebase User الحالي
       _firebaseUser.value = _auth.currentUser;
-      
+
       // إذا كان هناك مستخدم، تحميل بياناته
       if (_firebaseUser.value != null) {
         await loadUserData(_firebaseUser.value!.uid);
@@ -58,13 +62,12 @@ class AuthController extends GetxController {
           isLoggedIn.value = true;
         }
       }
-      
+
       // البدء في الاستماع لتغييرات حالة المستخدم
       _firebaseUser.bindStream(_auth.authStateChanges());
       ever(_firebaseUser, _handleAuthStateChange);
-      
+
       _isInitialized = true;
-      
     } catch (e) {
       logger.w('خطأ في تهيئة AuthController: $e');
     }
@@ -74,17 +77,21 @@ class AuthController extends GetxController {
   void _handleAuthStateChange(User? user) async {
     // تجنب التعامل مع التغييرات أثناء التهيئة الأولى
     if (!_isInitialized) return;
-    
+
     if (user == null) {
       // المستخدم خرج من النظام
       currentUser.value = null;
       isLoggedIn.value = false;
+      // مسح البيانات المحفوظة
+      await _clearSavedLoginState();
     } else {
       // المستخدم سجل دخول أو تم تحديث بياناته
       await loadUserData(user.uid);
-      
+
       if (currentUser.value != null) {
         isLoggedIn.value = true;
+        // حفظ حالة تسجيل الدخول
+        await _saveLoginState();
       }
     }
   }
@@ -92,13 +99,12 @@ class AuthController extends GetxController {
   /// تحميل بيانات المستخدم من Firestore
   Future<void> loadUserData(String uid) async {
     try {
-      DocumentSnapshot doc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .get();
+      DocumentSnapshot doc =
+          await _firestore.collection('users').doc(uid).get();
 
       if (doc.exists) {
-        currentUser.value = UserModel.fromMap(doc.data() as Map<String, dynamic>);
+        currentUser.value =
+            UserModel.fromMap(doc.data() as Map<String, dynamic>);
       } else {
         currentUser.value = null;
       }
@@ -140,7 +146,31 @@ class AuthController extends GetxController {
   }
 
   /// تحديد نوع المستخدم للتسجيل الاجتماعي
-  void selectUserTypeForSocialLogin(UserType type) {
+  void selectUserTypeForSocialLogin(UserType type) async {
+    // التحقق من وجود حساب سابق
+    if (_auth.currentUser != null) {
+      DocumentSnapshot existingUser = await _firestore
+          .collection('users')
+          .doc(_auth.currentUser!.uid)
+          .get();
+
+      if (existingUser.exists) {
+        final userData = existingUser.data() as Map<String, dynamic>;
+        final existingUserType = userData['userType'] as String;
+
+        if (existingUserType != type.toString()) {
+          Get.snackbar(
+            'خطأ',
+            'لا يمكن تغيير نوع المستخدم. هذا الحساب موجود بالفعل كنوع: ${existingUserType == 'rider' ? 'راكب' : 'سائق'}',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+      }
+    }
+
     selectedUserType.value = type;
   }
 
@@ -175,13 +205,14 @@ class AuthController extends GetxController {
 
       // تسجيل الدخول بـ Google
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         isLoading.value = false;
         return; // المستخدم ألغى العملية
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
 
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
@@ -190,7 +221,7 @@ class AuthController extends GetxController {
 
       // تسجيل الدخول في Firebase
       UserCredential result = await _auth.signInWithCredential(credential);
-      
+
       if (result.user != null) {
         await _handleSuccessfulLogin(result.user!, {
           'name': googleUser.displayName ?? '',
@@ -240,13 +271,13 @@ class AuthController extends GetxController {
   //     );
 
   //     UserCredential result = await _auth.signInWithCredential(oauthCredential);
-      
+
   //     if (result.user != null) {
   //       String displayName = '';
   //       if (credential.givenName != null && credential.familyName != null) {
   //         displayName = '${credential.givenName} ${credential.familyName}';
   //       }
-        
+
   //       await _handleSuccessfulLogin(result.user!, {
   //         'name': displayName,
   //         'email': credential.email ?? result.user!.email ?? '',
@@ -266,12 +297,27 @@ class AuthController extends GetxController {
   // }
 
   /// معالجة تسجيل الدخول الناجح
-  Future<void> _handleSuccessfulLogin(User firebaseUser, Map<String, dynamic> userInfo) async {
+  Future<void> _handleSuccessfulLogin(
+      User firebaseUser, Map<String, dynamic> userInfo) async {
     try {
-      // تحميل بيانات المستخدم
-      await loadUserData(firebaseUser.uid);
-      
-      if (currentUser.value == null) {
+      // التحقق من وجود حساب سابق
+      DocumentSnapshot existingUser =
+          await _firestore.collection('users').doc(firebaseUser.uid).get();
+
+      if (existingUser.exists) {
+        // المستخدم موجود بالفعل - تحميل بياناته
+        await loadUserData(firebaseUser.uid);
+
+        if (currentUser.value != null) {
+          Get.snackbar(
+            'أهلاً وسهلاً',
+            'مرحباً بعودتك ${currentUser.value!.name}',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+        }
+      } else {
         // مستخدم جديد - إنشاء حساب
         UserModel newUser = UserModel(
           id: firebaseUser.uid,
@@ -283,45 +329,93 @@ class AuthController extends GetxController {
           createdAt: DateTime.now(),
         );
 
-        // حفظ البيانات في Firestore
-        await _firestore
-            .collection('users')
-            .doc(newUser.id)
-            .set(newUser.toMap());
+        try {
+          // حفظ البيانات في Firestore
+          await _firestore
+              .collection('users')
+              .doc(newUser.id)
+              .set(newUser.toMap());
+          currentUser.value = newUser;
 
-        currentUser.value = newUser;
-        
-        Get.snackbar(
-          'مرحباً بك',
-          'تم إنشاء حسابك بنجاح',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
-      } else {
-        Get.snackbar(
-          'أهلاً وسهلاً',
-          'مرحباً بعودتك ${currentUser.value!.name}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white,
-        );
+          Get.snackbar(
+            'مرحباً بك',
+            'تم إنشاء حسابك بنجاح',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.green,
+            colorText: Colors.white,
+          );
+        } catch (firestoreError) {
+          logger.w('خطأ في حفظ البيانات في Firestore: $firestoreError');
+          throw Exception('فشل في حفظ البيانات. يرجى المحاولة مرة أخرى.');
+        }
       }
-      
+
+      // حفظ حالة تسجيل الدخول
+      await _saveLoginState();
+
       isLoggedIn.value = true;
       navigateToHome();
-      
     } catch (e) {
       logger.w('خطأ في معالجة تسجيل الدخول: $e');
       Get.snackbar(
         'خطأ',
-        'فشل في حفظ بيانات المستخدم',
+        'فشل في حفظ بيانات المستخدم: ${e.toString()}',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  /// حفظ حالة تسجيل الدخول
+  Future<void> _saveLoginState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('is_logged_in', true);
+      await prefs.setString('user_id', currentUser.value!.id);
+      await prefs.setString(
+          'user_type', currentUser.value!.userType.toString());
+      await prefs.setString('user_name', currentUser.value!.name);
+      await prefs.setString('user_phone', currentUser.value!.phone);
+      if (currentUser.value!.email.isNotEmpty) {
+        await prefs.setString('user_email', currentUser.value!.email);
+      }
+      if (currentUser.value!.profileImage != null) {
+        await prefs.setString(
+            'user_profile_image', currentUser.value!.profileImage!);
+      }
+    } catch (e) {
+      logger.w('خطأ في حفظ حالة تسجيل الدخول: $e');
+    }
+  }
+
+  /// تحميل حالة تسجيل الدخول
+  Future<void> _loadLoginState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final isLoggedInSaved = prefs.getBool('is_logged_in') ?? false;
+
+      if (isLoggedInSaved) {
+        final userId = prefs.getString('user_id');
+        final userType = prefs.getString('user_type');
+
+        if (userId != null && userType != null) {
+          // تحميل بيانات المستخدم من Firestore
+          await loadUserData(userId);
+
+          if (currentUser.value != null) {
+            isLoggedIn.value = true;
+            selectedUserType.value = UserType.values.firstWhere(
+              (e) => e.toString() == userType,
+              orElse: () => UserType.rider,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      logger.w('خطأ في تحميل حالة تسجيل الدخول: $e');
     }
   }
 
@@ -394,10 +488,7 @@ class AuthController extends GetxController {
       );
 
       // حفظ البيانات في Firestore
-      await _firestore
-          .collection('users')
-          .doc(user.id)
-          .set(user.toMap());
+      await _firestore.collection('users').doc(user.id).set(user.toMap());
 
       currentUser.value = user;
       isLoggedIn.value = true;
@@ -474,14 +565,17 @@ class AuthController extends GetxController {
       if (await _googleSignIn.isSignedIn()) {
         await _googleSignIn.signOut();
       }
-      
+
       await _auth.signOut();
       currentUser.value = null;
       isLoggedIn.value = false;
-      
+
       // مسح البيانات المحلية
       _clearControllers();
-      
+
+      // مسح البيانات المحفوظة
+      await _clearSavedLoginState();
+
       Get.offAllNamed(AppRoutes.USER_TYPE_SELECTION);
     } catch (e) {
       logger.w('خطأ في تسجيل الخروج: $e');
@@ -490,6 +584,22 @@ class AuthController extends GetxController {
         'فشل في تسجيل الخروج',
         snackPosition: SnackPosition.BOTTOM,
       );
+    }
+  }
+
+  /// مسح البيانات المحفوظة
+  Future<void> _clearSavedLoginState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('is_logged_in');
+      await prefs.remove('user_id');
+      await prefs.remove('user_type');
+      await prefs.remove('user_name');
+      await prefs.remove('user_phone');
+      await prefs.remove('user_email');
+      await prefs.remove('user_profile_image');
+    } catch (e) {
+      logger.w('خطأ في مسح البيانات المحفوظة: $e');
     }
   }
 
@@ -508,7 +618,7 @@ class AuthController extends GetxController {
   String _formatPhoneNumber(String phone) {
     // إزالة أي مسافات أو رموز
     phone = phone.replaceAll(RegExp(r'[^\d]'), '');
-    
+
     // إضافة رمز العراق إذا لم يكن موجود
     if (!phone.startsWith('+964')) {
       if (phone.startsWith('964')) {
@@ -519,7 +629,7 @@ class AuthController extends GetxController {
         phone = '+964$phone';
       }
     }
-    
+
     return phone;
   }
 

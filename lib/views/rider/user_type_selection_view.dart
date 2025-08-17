@@ -18,20 +18,20 @@ class UserTypeSelectionView extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 60),
-              
+
               // Logo والعنوان
               _buildHeader(),
-              
+
               const Spacer(),
-              
+
               // خيارات المستخدم
               _buildUserOptions(),
-              
+
               const Spacer(),
-              
+
               // روابط التسجيل
               _buildSignUpLinks(),
-              
+
               const SizedBox(height: 40),
             ],
           ),
@@ -64,9 +64,9 @@ class UserTypeSelectionView extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // العنوان
         const Text(
           'تكسي البصرة',
@@ -76,9 +76,9 @@ class UserTypeSelectionView extends StatelessWidget {
             color: Colors.black87,
           ),
         ),
-        
+
         const SizedBox(height: 8),
-        
+
         const Text(
           'مرحباً بك',
           style: TextStyle(
@@ -86,9 +86,9 @@ class UserTypeSelectionView extends StatelessWidget {
             color: Colors.grey,
           ),
         ),
-        
+
         const SizedBox(height: 4),
-        
+
         const Text(
           'سجل الدخول للاستمتاع بخدماتنا',
           style: TextStyle(
@@ -105,9 +105,9 @@ class UserTypeSelectionView extends StatelessWidget {
       children: [
         // تسجيل الدخول بـ Google
         _buildGoogleSignInButton(),
-        
+
         const SizedBox(height: 16),
-        
+
         // تسجيل الدخول بـ Apple
         _buildAppleSignInButton(),
       ],
@@ -255,42 +255,42 @@ class UserTypeSelectionView extends StatelessWidget {
             ],
           ),
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // تسجيل حساب جديد
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              'ليس لديك حساب؟ ',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey,
-              ),
-            ),
-            GestureDetector(
-              onTap: () {
-                _showUserTypeDialog('signup');
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.blue),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'إنشاء حساب جديد',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+        // Row(
+        //   mainAxisAlignment: MainAxisAlignment.center,
+        //   children: [
+        //     const Text(
+        //       'ليس لديك حساب؟ ',
+        //       style: TextStyle(
+        //         fontSize: 14,
+        //         color: Colors.grey,
+        //       ),
+        //     ),
+        //     GestureDetector(
+        //       onTap: () {
+        //         _showUserTypeDialog('signup');
+        //       },
+        //       child: Container(
+        //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        //         decoration: BoxDecoration(
+        //           border: Border.all(color: Colors.blue),
+        //           borderRadius: BorderRadius.circular(6),
+        //         ),
+        //         child: const Text(
+        //           'إنشاء حساب جديد',
+        //           style: TextStyle(
+        //             fontSize: 14,
+        //             color: Colors.blue,
+        //             fontWeight: FontWeight.w600,
+        //           ),
+        //         ),
+        //       ),
+        //     ),
+        //   ],
+        // ),
       ],
     );
   }
@@ -347,14 +347,14 @@ class UserTypeSelectionView extends StatelessWidget {
       onTap: () {
         Get.back();
         authController.selectUserTypeForSocialLogin(userType);
-        
+
         // تنفيذ نوع تسجيل الدخول المحدد
         switch (loginType) {
           case 'google':
             authController.signInWithGoogle();
             break;
-          // case 'apple':
-          //   authController.signInWithApple();
+            // case 'apple':
+            //   authController.signInWithApple();
             break;
           case 'signup':
             // TODO: يمكن إضافة صفحة التسجيل لاحقاً

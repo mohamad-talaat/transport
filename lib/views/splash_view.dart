@@ -75,8 +75,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
   Future<void> _initializeApp() async {
     try {
-      // انتظار لمدة ثانيتين على الأقل لعرض الشاشة
-      await Future.delayed(const Duration(seconds: 2));
+      // تقليل الانتظار لتسريع الدخول للواجهة الرئيسية
+      await Future.delayed(const Duration(milliseconds: 800));
 
       if (!mounted || _hasNavigated) return;
 
@@ -107,8 +107,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
-      // انتظار تحميل البيانات المحفوظة
-      await Future.delayed(const Duration(milliseconds: 500));
+      // انتظار قصير لتحميل البيانات المحفوظة
+      await Future.delayed(const Duration(milliseconds: 300));
 
       // التحقق من حالة المستخدم
       final user = authController.currentUser.value;

@@ -62,6 +62,8 @@ class LocationService extends GetxService {
 
   /// الحصول على الموقع الحالي
   Future<LatLng?> getCurrentLocation() async {
+    Position? position;
+
     try {
       if (!hasLocationPermission.value) {
         await _requestLocationPermission();
@@ -82,6 +84,8 @@ class LocationService extends GetxService {
       
       return location;
     } catch (e) {
+        position = await Geolocator.getLastKnownPosition();
+
       logger.w('خطأ في الحصول على الموقع: $e');
       Get.snackbar(
         'خطأ في الموقع',

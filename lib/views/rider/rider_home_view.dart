@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/controllers/map_controller.dart';
 import 'package:transport_app/controllers/trip_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:transport_app/models/trip_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
@@ -23,11 +24,13 @@ class _RiderHomeViewState extends State<RiderHomeView> {
   // final MapControllerr mapController = Get.find<MapControllerr>();
   final MapControllerr mapController = Get.put(MapControllerr());
   final TripController tripController = Get.find<TripController>();
+  bool _hasOpenedDestinationSheetOnce = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
+      drawer: _buildDrawer(),
       body: Stack(
         children: [
           // الخريطة
@@ -48,12 +51,42 @@ class _RiderHomeViewState extends State<RiderHomeView> {
           // قائمة البحث
           _buildSearchResults(),
 
+          // بطاقة الطلب/الرحلة
+          _buildBottomTripCard(),
+
           // شاشة التحميل
           _buildLoadingOverlay(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
+      //  bottomNavigationBar: _buildBottomNavigationBar(),
     );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDestinationSheetFlag();
+  }
+
+  Future<void> _loadDestinationSheetFlag() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasOpenedDestinationSheetOnce =
+          prefs.getBool('rider_opened_destination_once') ?? false;
+
+      // افتح نافذة الوجهة تلقائياً لأول مرة فقط، عندما لا تكون هناك رحلة نشطة
+      if (!_hasOpenedDestinationSheetOnce &&
+          !tripController.hasActiveTrip.value) {
+        // انتظر أول frame لضمان أن Build اكتمل
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showDestinationBottomSheet();
+          prefs.setBool('rider_opened_destination_once', true);
+          _hasOpenedDestinationSheetOnce = true;
+        });
+      }
+    } catch (_) {
+      // تجاهل أي خطأ بسيط في القراءة
+    }
   }
 
   /// الخريطة الرئيسية
@@ -111,9 +144,11 @@ class _RiderHomeViewState extends State<RiderHomeView> {
         child: Row(
           children: [
             // زر القائمة
-            IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+            Builder(
+              builder: (ctx) => IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () => Scaffold.of(ctx).openDrawer(),
+              ),
             ),
 
             // مربع البحث
@@ -203,7 +238,7 @@ class _RiderHomeViewState extends State<RiderHomeView> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} ج.م',
+                    '${(authController.currentUser.value?.balance ?? 0.0).toStringAsFixed(2)} ج.م',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -371,7 +406,8 @@ class _RiderHomeViewState extends State<RiderHomeView> {
           Obx(() => SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: mapController.selectedLocation.value != null
+                  onPressed: mapController.selectedLocation.value != null &&
+                          !tripController.isRequestingTrip.value
                       ? _requestTrip
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -383,10 +419,20 @@ class _RiderHomeViewState extends State<RiderHomeView> {
                     ),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'طلب رحلة',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
+                  child: tripController.isRequestingTrip.value
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'طلب رحلة',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
                 ),
               )),
         ],
@@ -589,55 +635,65 @@ class _RiderHomeViewState extends State<RiderHomeView> {
 
   /// نتائج البحث
   Widget _buildSearchResults() {
-    return Positioned(
-      top: MediaQuery.of(Get.context!).padding.top + 80,
-      left: 16,
-      right: 16,
-      child: Container(
-        constraints: const BoxConstraints(maxHeight: 300),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
+    return Obx(() {
+      if (mapController.searchResults.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      return Positioned(
+        top: MediaQuery.of(Get.context!).padding.top + 80,
+        left: 16,
+        right: 16,
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 300),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: mapController.searchResults.length,
+            itemBuilder: (context, index) {
+              final result = mapController.searchResults[index];
+              return ListTile(
+                leading: const Icon(Icons.location_on, color: Colors.red),
+                title: Text(
+                  result.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  result.address,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => mapController.selectLocationFromSearch(result),
+              );
+            },
+          ),
         ),
-        child: Obx(() => ListView.builder(
-              shrinkWrap: true,
-              itemCount: mapController.searchResults.length,
-              itemBuilder: (context, index) {
-                final result = mapController.searchResults[index];
-                return ListTile(
-                  leading: const Icon(Icons.location_on, color: Colors.red),
-                  title: Text(
-                    result.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  subtitle: Text(
-                    result.address,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => mapController.selectLocationFromSearch(result),
-                );
-              },
-            )),
-      ),
-    );
+      );
+    });
   }
 
   /// شاشة التحميل
   Widget _buildLoadingOverlay() {
-    return Container(
-      color: Colors.black.withOpacity(0.3),
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    return Obx(() {
+      final bool showOverlay = mapController.isLoading.value;
+      if (!showOverlay) return const SizedBox.shrink();
+
+      return Container(
+        color: Colors.black.withOpacity(0.3),
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    });
   }
 
   /// عرض معلومات المستخدم في الأعلى
@@ -698,57 +754,57 @@ class _RiderHomeViewState extends State<RiderHomeView> {
     );
   }
 
-  /// شريط التنقل السفلي
-  Widget _buildBottomNavigationBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildBottomNavItem(
-                icon: Icons.home,
-                label: 'الرئيسية',
-                isSelected: true,
-                onTap: () {},
-              ),
-              _buildBottomNavItem(
-                icon: Icons.history,
-                label: 'التاريخ',
-                onTap: () => Get.toNamed(AppRoutes.RIDER_TRIP_HISTORY),
-              ),
-              _buildBottomNavItem(
-                icon: Icons.account_balance_wallet,
-                label: 'المحفظة',
-                onTap: () => Get.toNamed(AppRoutes.RIDER_WALLET),
-              ),
-              _buildBottomNavItem(
-                icon: Icons.person,
-                label: 'الملف',
-                onTap: () => Get.toNamed(AppRoutes.RIDER_PROFILE),
-              ),
-              _buildBottomNavItem(
-                icon: Icons.menu,
-                label: 'المزيد',
-                onTap: () => _showMoreOptions(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // /// شريط التنقل السفلي
+  // Widget _buildBottomNavigationBar() {
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       color: Colors.white,
+  //       boxShadow: [
+  //         BoxShadow(
+  //           color: Colors.black.withOpacity(0.1),
+  //           blurRadius: 10,
+  //           offset: const Offset(0, -2),
+  //         ),
+  //       ],
+  //     ),
+  //     child: SafeArea(
+  //       child: Padding(
+  //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+  //         child: Row(
+  //           mainAxisAlignment: MainAxisAlignment.spaceAround,
+  //           children: [
+  //             _buildBottomNavItem(
+  //               icon: Icons.home,
+  //               label: 'الرئيسية',
+  //               isSelected: true,
+  //               onTap: () {},
+  //             ),
+  //             _buildBottomNavItem(
+  //               icon: Icons.history,
+  //               label: 'التاريخ',
+  //               onTap: () => Get.toNamed(AppRoutes.RIDER_TRIP_HISTORY),
+  //             ),
+  //             _buildBottomNavItem(
+  //               icon: Icons.account_balance_wallet,
+  //               label: 'المحفظة',
+  //               onTap: () => Get.toNamed(AppRoutes.RIDER_WALLET),
+  //             ),
+  //             _buildBottomNavItem(
+  //               icon: Icons.person,
+  //               label: 'الملف',
+  //               onTap: () => Get.toNamed(AppRoutes.RIDER_PROFILE),
+  //             ),
+  //             _buildBottomNavItem(
+  //               icon: Icons.menu,
+  //               label: 'المزيد',
+  //               onTap: () => _showMoreOptions(),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 
   /// عنصر شريط التنقل السفلي
   Widget _buildBottomNavItem({
@@ -870,53 +926,56 @@ class _RiderHomeViewState extends State<RiderHomeView> {
   void _showDestinationBottomSheet() {
     Get.bottomSheet(
       Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'اختر الوجهة',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              autofocus: true,
-              textDirection: TextDirection.rtl,
-              decoration: const InputDecoration(
-                hintText: 'ابحث عن الوجهة...',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (value) => mapController.searchLocation(value),
-            ),
-            const SizedBox(height: 16),
-            Obx(() => Expanded(
-                  child: ListView.builder(
-                    itemCount: mapController.searchResults.length,
-                    itemBuilder: (context, index) {
-                      final result = mapController.searchResults[index];
-                      return ListTile(
-                        leading: const Icon(Icons.location_on),
-                        title: Text(result.name),
-                        subtitle: Text(result.address),
-                        onTap: () {
-                          mapController.selectLocationFromSearch(result);
-                          Get.back();
-                        },
-                      );
-                    },
+          padding: const EdgeInsets.all(20),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'اختر الوجهة',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                )),
-          ],
-        ),
-      ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  autofocus: true,
+                  textDirection: TextDirection.rtl,
+                  decoration: const InputDecoration(
+                    hintText: 'ابحث عن الوجهة...',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.search),
+                  ),
+                  onChanged: (value) => mapController.searchLocation(value),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 300,
+                  child: Obx(() => ListView.builder(
+                        itemCount: mapController.searchResults.length,
+                        itemBuilder: (context, index) {
+                          final result = mapController.searchResults[index];
+                          return ListTile(
+                            leading: const Icon(Icons.location_on),
+                            title: Text(result.name),
+                            subtitle: Text(result.address),
+                            onTap: () {
+                              mapController.selectLocationFromSearch(result);
+                              Get.back();
+                            },
+                          );
+                        },
+                      )),
+                ),
+              ],
+            ),
+          )),
+      isScrollControlled: true,
     );
   }
 
@@ -962,5 +1021,69 @@ class _RiderHomeViewState extends State<RiderHomeView> {
       case TripStatus.cancelled:
         return Colors.red;
     }
+  }
+
+  /// إنشاء القائمة الجانبية
+  Widget _buildDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('الملف الشخصي'),
+              onTap: () {
+                Get.back();
+                Get.toNamed(AppRoutes.RIDER_PROFILE);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.history),
+              title: const Text('تاريخ الرحلات'),
+              onTap: () {
+                Get.back();
+                Get.toNamed(AppRoutes.RIDER_TRIP_HISTORY);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.account_balance_wallet),
+              title: const Text('المحفظة'),
+              onTap: () {
+                Get.back();
+                Get.toNamed(AppRoutes.RIDER_WALLET);
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('الإعدادات'),
+              onTap: () {
+                Get.back();
+                Get.toNamed(AppRoutes.RIDER_SETTINGS);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('عن التطبيق'),
+              onTap: () {
+                Get.back();
+                Get.toNamed(AppRoutes.RIDER_ABOUT);
+              },
+            ),
+            const Spacer(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('تسجيل الخروج',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Get.back();
+                authController.signOut();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

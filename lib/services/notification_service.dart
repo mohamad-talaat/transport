@@ -47,9 +47,7 @@ class NotificationService extends GetxService {
 
       // مراقبة تحديث التوكن
       _firebaseMessaging!.onTokenRefresh.listen((newToken) {
-        if (newToken != null) {
-          _sendTokenToServer(newToken);
-        }
+        _sendTokenToServer(newToken);
       });
     } catch (e) {
       logger.e('خطأ في تهيئة Firebase Messaging: $e');
@@ -215,22 +213,21 @@ class NotificationService extends GetxService {
   /// التنقل حسب نوع الإشعار
   void _handleNotificationNavigation(Map<String, dynamic> data) {
     final type = data['type'];
-    final route = data['route'];
 
     switch (type) {
       case 'trip_update':
-        Get.toNamed('/trip-tracking', arguments: data);
+        Get.toNamed('/rider-trip-tracking', arguments: data);
         break;
       case 'admin_message':
-        Get.toNamed('/notifications');
+        Get.toNamed('/rider-notifications');
         break;
       case 'balance_update':
-        Get.toNamed('/wallet');
+        Get.toNamed('/rider-wallet');
         break;
       default:
-        if (route != null) {
-          Get.toNamed(route);
-        }
+        // تجاهل أي route غير معروف لتفادي /not-found
+        // يمكن لاحقاً عمل mapping حسب payload
+        return;
     }
   }
 

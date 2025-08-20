@@ -9,7 +9,7 @@ class UserModel {
   final String email;
   final String? profileImage;
   final UserType userType;
-  final double balance;
+  late final double balance;
   final DateTime createdAt;
   final bool isActive;
   final Map<String, dynamic>? additionalData;

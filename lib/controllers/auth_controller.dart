@@ -4,12 +4,13 @@ import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:transport_app/main.dart';
 import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../views/rider/location_permission_screen.dart';
+// import '../views/rider/location_permission_screen.dart';
 
 class AuthController extends GetxController {
   static AuthController get to => Get.find();
@@ -114,39 +115,20 @@ class AuthController extends GetxController {
     }
   }
 
-  /// التنقل إلى الصفحة الرئيسية حسب نوع المستخدم
+  /// التنقل إلى الصفحة الرئيسية حسب نوع المستخدم (تجاوز أي حوارات وسيطًا)
   void navigateToHome() {
-    // أولاً طلب إذن الموقع
-    _showLocationPermissionDialog();
+    if (currentUser.value?.userType == UserType.rider) {
+      Get.offAllNamed(AppRoutes.RIDER_HOME);
+    } else if (currentUser.value?.userType == UserType.driver) {
+      Get.offAllNamed(AppRoutes.DRIVER_HOME);
+    }
   }
 
-  /// عرض نافذة طلب إذن الموقع
-  void _showLocationPermissionDialog() {
-    Get.dialog(
-      LocationPermissionScreen(
-        onPermissionGranted: () {
-          // الانتقال للصفحة الرئيسية بعد الحصول على الإذن
-          if (currentUser.value?.userType == UserType.rider) {
-            Get.offAllNamed(AppRoutes.RIDER_HOME);
-          } else if (currentUser.value?.userType == UserType.driver) {
-            Get.offAllNamed(AppRoutes.DRIVER_HOME);
-          }
-        },
-        onPermissionDenied: () {
-          // الانتقال للصفحة الرئيسية حتى لو تم رفض الإذن
-          if (currentUser.value?.userType == UserType.rider) {
-            Get.offAllNamed(AppRoutes.RIDER_HOME);
-          } else if (currentUser.value?.userType == UserType.driver) {
-            Get.offAllNamed(AppRoutes.DRIVER_HOME);
-          }
-        },
-      ),
-      barrierDismissible: false,
-    );
-  }
+  // لم نعد نستخدم نافذة طلب إذن الموقع عند الدخول
 
   /// تحديد نوع المستخدم للتسجيل الاجتماعي
-  void selectUserTypeForSocialLogin(UserType type) async {
+  /// يرجع true إذا تم قبول النوع ويمكن المتابعة، وfalse إذا كان هناك تعارض
+  Future<bool> selectUserTypeForSocialLogin(UserType type) async {
     // التحقق من وجود حساب سابق
     if (_auth.currentUser != null) {
       DocumentSnapshot existingUser = await _firestore
@@ -156,9 +138,10 @@ class AuthController extends GetxController {
 
       if (existingUser.exists) {
         final userData = existingUser.data() as Map<String, dynamic>;
-        final existingUserType = userData['userType'] as String;
+        final existingUserType =
+            userData['userType'] as String; // تُحفظ كـ 'rider' أو 'driver'
 
-        if (existingUserType != type.toString()) {
+        if (existingUserType != type.name) {
           Get.snackbar(
             'خطأ',
             'لا يمكن تغيير نوع المستخدم. هذا الحساب موجود بالفعل كنوع: ${existingUserType == 'rider' ? 'راكب' : 'سائق'}',
@@ -166,12 +149,13 @@ class AuthController extends GetxController {
             backgroundColor: Colors.red,
             colorText: Colors.white,
           );
-          return;
+          return false;
         }
       }
     }
 
     selectedUserType.value = type;
+    return true;
   }
 
   /// تحديد نوع المستخدم للهاتف (قريباً)
@@ -203,7 +187,16 @@ class AuthController extends GetxController {
     try {
       isLoading.value = true;
 
-      // تسجيل الدخول بـ Google
+      // لضمان ظهور قائمة اختيار الحساب كل مرة
+      try {
+        await _googleSignIn.disconnect();
+      } catch (_) {}
+      await _googleSignIn.signOut();
+      if (_auth.currentUser != null) {
+        await _auth.signOut();
+      }
+
+      // تسجيل الدخول بـ Google (سيعرض قائمة الحسابات)
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
@@ -242,59 +235,59 @@ class AuthController extends GetxController {
     }
   }
 
-  // /// تسجيل الدخول بـ Apple
-  // Future<void> signInWithApple() async {
-  //   if (selectedUserType.value == null) {
-  //     Get.snackbar(
-  //       'خطأ',
-  //       'يرجى اختيار نوع المستخدم أولاً',
-  //       snackPosition: SnackPosition.BOTTOM,
-  //       backgroundColor: Colors.red,
-  //       colorText: Colors.white,
-  //     );
-  //     return;
-  //   }
+  /// تسجيل الدخول بـ Apple
+  Future<void> signInWithApple() async {
+    if (selectedUserType.value == null) {
+      Get.snackbar(
+        'خطأ',
+        'يرجى اختيار نوع المستخدم أولاً',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+      return;
+    }
 
-  //   try {
-  //     isLoading.value = true;
+    try {
+      isLoading.value = true;
 
-  //     final credential = await SignInWithApple.getAppleIDCredential(
-  //       scopes: [
-  //         AppleIDAuthorizationScopes.email,
-  //         AppleIDAuthorizationScopes.fullName,
-  //       ],
-  //     );
+      final credential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+      );
 
-  //     final oauthCredential = OAuthProvider("apple.com").credential(
-  //       idToken: credential.identityToken,
-  //       accessToken: credential.authorizationCode,
-  //     );
+      final oauthCredential = OAuthProvider("apple.com").credential(
+        idToken: credential.identityToken,
+        accessToken: credential.authorizationCode,
+      );
 
-  //     UserCredential result = await _auth.signInWithCredential(oauthCredential);
+      UserCredential result = await _auth.signInWithCredential(oauthCredential);
 
-  //     if (result.user != null) {
-  //       String displayName = '';
-  //       if (credential.givenName != null && credential.familyName != null) {
-  //         displayName = '${credential.givenName} ${credential.familyName}';
-  //       }
+      if (result.user != null) {
+        String displayName = '';
+        if (credential.givenName != null && credential.familyName != null) {
+          displayName = '${credential.givenName} ${credential.familyName}';
+        }
 
-  //       await _handleSuccessfulLogin(result.user!, {
-  //         'name': displayName,
-  //         'email': credential.email ?? result.user!.email ?? '',
-  //       });
-  //     }
-  //   } catch (e) {
-  //     isLoading.value = false;
-  //     logger.w('خطأ في تسجيل الدخول بـ Apple: $e');
-  //     Get.snackbar(
-  //       'خطأ',
-  //       'فشل في تسجيل الدخول بـ Apple',
-  //       snackPosition: SnackPosition.BOTTOM,
-  //       backgroundColor: Colors.red,
-  //       colorText: Colors.white,
-  //     );
-  //   }
-  // }
+        await _handleSuccessfulLogin(result.user!, {
+          'name': displayName,
+          'email': credential.email ?? result.user!.email ?? '',
+        });
+      }
+    } catch (e) {
+      isLoading.value = false;
+      logger.w('خطأ في تسجيل الدخول بـ Apple: $e');
+      Get.snackbar(
+        'خطأ',
+        'فشل في تسجيل الدخول بـ Apple',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
 
   /// معالجة تسجيل الدخول الناجح
   Future<void> _handleSuccessfulLogin(
@@ -307,6 +300,24 @@ class AuthController extends GetxController {
       if (existingUser.exists) {
         // المستخدم موجود بالفعل - تحميل بياناته
         await loadUserData(firebaseUser.uid);
+
+        // منع استخدام نفس الحساب لنوع مختلف مما تم اختياره
+        if (selectedUserType.value != null &&
+            currentUser.value != null &&
+            currentUser.value!.userType != selectedUserType.value) {
+          final existingType =
+              currentUser.value!.userType == UserType.rider ? 'راكب' : 'سائق';
+          Get.snackbar(
+            'لا يمكن المتابعة',
+            'هذا البريد مسجل مسبقاً كـ $existingType. يرجى اختيار نوع مطابق أو استخدام بريد آخر.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          // تسجيل الخروج لمنع الدخول الخاطئ
+          await signOut();
+          return;
+        }
 
         if (currentUser.value != null) {
           Get.snackbar(
@@ -576,6 +587,12 @@ class AuthController extends GetxController {
       // مسح البيانات المحفوظة
       await _clearSavedLoginState();
 
+      // إعادة تعيين تهيئة شاشة الوجهة الأولى للراكب
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('rider_opened_destination_once');
+      } catch (_) {}
+
       Get.offAllNamed(AppRoutes.USER_TYPE_SELECTION);
     } catch (e) {
       logger.w('خطأ في تسجيل الخروج: $e');
@@ -614,24 +631,19 @@ class AuthController extends GetxController {
     );
   }
 
-  /// تنسيق رقم الهاتف (للعراق)
-  String _formatPhoneNumber(String phone) {
-    // إزالة أي مسافات أو رموز
-    phone = phone.replaceAll(RegExp(r'[^\d]'), '');
-
-    // إضافة رمز العراق إذا لم يكن موجود
-    if (!phone.startsWith('+964')) {
-      if (phone.startsWith('964')) {
-        phone = '+$phone';
-      } else if (phone.startsWith('0')) {
-        phone = '+964${phone.substring(1)}';
-      } else {
-        phone = '+964$phone';
-      }
-    }
-
-    return phone;
-  }
+  // String _formatPhoneNumber(String phone) {
+  //   phone = phone.replaceAll(RegExp(r'[^\\d]'), '');
+  //   if (!phone.startsWith('+964')) {
+  //     if (phone.startsWith('964')) {
+  //       phone = '+$phone';
+  //     } else if (phone.startsWith('0')) {
+  //       phone = '+964${phone.substring(1)}';
+  //     } else {
+  //       phone = '+964$phone';
+  //     }
+  //   }
+  //   return phone;
+  // }
 
   /// مسح المتحكمات
   void _clearControllers() {

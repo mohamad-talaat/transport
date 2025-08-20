@@ -4,35 +4,28 @@ import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/models/user_model.dart';
 
 class UserTypeSelectionView extends StatelessWidget {
-  final AuthController authController = Get.put(AuthController());
+  final AuthController authController = Get.isRegistered<AuthController>()
+      ? Get.find<AuthController>()
+      : Get.put(AuthController(), permanent: true);
 
   UserTypeSelectionView({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.grey[50],
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             children: [
-              const SizedBox(height: 60),
-
-              // Logo والعنوان
-              _buildHeader(),
-
-              const Spacer(),
-
-              // خيارات المستخدم
-              _buildUserOptions(),
-
-              const Spacer(),
-
-              // روابط التسجيل
-              _buildSignUpLinks(),
-
               const SizedBox(height: 40),
+              _buildHeader(),
+              const Spacer(),
+              _buildUserOptions(),
+              const Spacer(),
+              _buildOtherOptions(),
+              const SizedBox(height: 30),
             ],
           ),
         ),
@@ -40,203 +33,155 @@ class UserTypeSelectionView extends StatelessWidget {
     );
   }
 
+  /// الهيدر (اللوجو + عنوان التطبيق)
   Widget _buildHeader() {
     return Column(
       children: [
-        // أيقونة التاكسي
         Container(
-          width: 100,
-          height: 100,
+          width: 140,
+          height: 140,
           decoration: BoxDecoration(
             color: Colors.amber.shade400,
-            borderRadius: BorderRadius.circular(20),
+            shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.amber.withOpacity(0.3),
-                blurRadius: 15,
+                color: Colors.amber.withOpacity(0.4),
+                blurRadius: 10,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: const Icon(
-            Icons.local_taxi,
-            size: 50,
-            color: Colors.white,
+          child: Image.asset(
+            "assets/images/taxi.jpg",
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.error, size: 40, color: Colors.red),
+
+            // ClipOval(
+            //   child: Image.asset(
+            //     "assets/images/taxi.jpg",
+            //     fit: BoxFit.cover,
+            //   ),
           ),
         ),
-
         const SizedBox(height: 24),
-
-        // العنوان
         const Text(
           'تكسي البصرة',
           style: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
             color: Colors.black87,
           ),
         ),
-
         const SizedBox(height: 8),
-
-        const Text(
-          'مرحباً بك',
+        Text(
+          'اختر وسيلة الدخول للبدء',
           style: TextStyle(
-            fontSize: 18,
-            color: Colors.grey,
-          ),
-        ),
-
-        const SizedBox(height: 4),
-
-        const Text(
-          'سجل الدخول للاستمتاع بخدماتنا',
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey,
+            fontSize: 16,
+            color: Colors.grey.shade600,
           ),
         ),
       ],
     );
   }
 
+  /// أزرار تسجيل الدخول
   Widget _buildUserOptions() {
     return Column(
       children: [
-        // تسجيل الدخول بـ Google
-        _buildGoogleSignInButton(),
-
+        _buildSocialButton(
+          label: 'تسجيل الدخول باستخدام Google',
+          color: Colors.white,
+          textColor: Colors.black87,
+          icon: Icons.g_mobiledata,
+          iconColor: Colors.red,
+          isLoading: authController.isLoading.value,
+          onTap: () => _showUserTypeDialog('google'),
+        ),
         const SizedBox(height: 16),
-
-        // تسجيل الدخول بـ Apple
-        _buildAppleSignInButton(),
+        _buildSocialButton(
+          label: 'تسجيل الدخول باستخدام Apple',
+          color: Colors.black,
+          textColor: Colors.white,
+          icon: Icons.apple,
+          iconColor: Colors.white,
+          onTap: () => _showUserTypeDialog('apple'),
+        ),
       ],
     );
   }
 
-  Widget _buildGoogleSignInButton() {
-    return Container(
+  /// زر تسجيل اجتماعي (Google, Apple)
+  Widget _buildSocialButton({
+    required String label,
+    required Color color,
+    required Color textColor,
+    required IconData icon,
+    required Color iconColor,
+    bool isLoading = false,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
       width: double.infinity,
       height: 56,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: ElevatedButton(
-        onPressed: () {
-          _showUserTypeDialog('google');
-        },
+        onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 0,
+          backgroundColor: color,
+          foregroundColor: textColor,
+          elevation: 2,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // أيقونة Google
-            Container(
-              width: 20,
-              height: 20,
-              decoration: const BoxDecoration(
-                color: Colors.red,
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Text(
-                  'G',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+        child: isLoading
+            ? const CircularProgressIndicator(strokeWidth: 2)
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: iconColor, size: 22),
+                  const SizedBox(width: 12),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
                   ),
-                ),
+                ],
               ),
-            ),
-            const SizedBox(width: 12),
-            const Text(
-              'تسجيل الدخول باستخدام Google',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
 
-  Widget _buildAppleSignInButton() {
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ElevatedButton(
-        onPressed: () {
-          _showUserTypeDialog('apple');
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // أيقونة Apple
-            Icon(
-              Icons.apple,
-              size: 20,
-              color: Colors.white,
-            ),
-            SizedBox(width: 12),
-            Text(
-              'تسجيل الدخول باستخدام Apple',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSignUpLinks() {
+  /// باقي الاختيارات (Phone login أو تسجيل جديد)
+  Widget _buildOtherOptions() {
     return Column(
       children: [
-        // تسجيل الدخول بالهاتف (قريباً)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
+        InkWell(
+          onTap: () {
+            Get.snackbar(
+              'قريباً',
+              'تسجيل الدخول بالهاتف سيكون متاح لاحقاً',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.orange,
+              colorText: Colors.white,
+            );
+          },
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.phone, size: 18, color: Colors.grey.shade600),
+              Icon(Icons.phone, size: 20, color: Colors.grey.shade700),
               const SizedBox(width: 8),
               Text(
                 'تسجيل الدخول بالهاتف',
                 style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey.shade600,
+                  fontSize: 15,
+                  color: Colors.grey.shade700,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
@@ -247,7 +192,7 @@ class UserTypeSelectionView extends StatelessWidget {
                   'قريباً',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.orange.shade700,
+                    color: Colors.orange.shade800,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -255,53 +200,36 @@ class UserTypeSelectionView extends StatelessWidget {
             ],
           ),
         ),
-
-        const SizedBox(height: 16),
-
-        // تسجيل حساب جديد
-        // Row(
-        //   mainAxisAlignment: MainAxisAlignment.center,
-        //   children: [
-        //     const Text(
-        //       'ليس لديك حساب؟ ',
-        //       style: TextStyle(
-        //         fontSize: 14,
-        //         color: Colors.grey,
-        //       ),
-        //     ),
-        //     GestureDetector(
-        //       onTap: () {
-        //         _showUserTypeDialog('signup');
-        //       },
-        //       child: Container(
-        //         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        //         decoration: BoxDecoration(
-        //           border: Border.all(color: Colors.blue),
-        //           borderRadius: BorderRadius.circular(6),
-        //         ),
-        //         child: const Text(
-        //           'إنشاء حساب جديد',
-        //           style: TextStyle(
-        //             fontSize: 14,
-        //             color: Colors.blue,
-        //             fontWeight: FontWeight.w600,
-        //           ),
-        //         ),
-        //       ),
-        //     ),
-        //   ],
-        // ),
+        const SizedBox(height: 20),
+        GestureDetector(
+          onTap: () {
+            _showUserTypeDialog('signup');
+          },
+          child: Text(
+            'إنشاء حساب جديد',
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.blue.shade700,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.underline,
+            ),
+          ),
+        ),
       ],
     );
   }
 
+  /// دايلوج اختيار نوع المستخدم
   void _showUserTypeDialog(String loginType) {
     Get.dialog(
       AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         title: const Text(
           'اختر نوع الحساب',
           textAlign: TextAlign.center,
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -318,7 +246,7 @@ class UserTypeSelectionView extends StatelessWidget {
             _buildDialogOption(
               'سائق',
               'للعمل وكسب المال',
-              Icons.drive_eta,
+              Icons.directions_car,
               Colors.blue,
               UserType.driver,
               loginType,
@@ -344,23 +272,20 @@ class UserTypeSelectionView extends StatelessWidget {
     String loginType,
   ) {
     return GestureDetector(
-      onTap: () {
+      onTap: () async {
         Get.back();
-        authController.selectUserTypeForSocialLogin(userType);
+        final bool canProceed =
+            await authController.selectUserTypeForSocialLogin(userType);
+        if (!canProceed) return;
 
-        // تنفيذ نوع تسجيل الدخول المحدد
         switch (loginType) {
           case 'google':
-            authController.signInWithGoogle();
-            break;
-            // case 'apple':
-            //   authController.signInWithApple();
+            await authController.signInWithGoogle();
             break;
           case 'signup':
-            // TODO: يمكن إضافة صفحة التسجيل لاحقاً
             Get.snackbar(
               'قريباً',
-              'إنشاء الحساب بطرق أخرى سيكون متاحاً قريباً',
+              'إنشاء الحساب سيكون متاح لاحقاً',
               snackPosition: SnackPosition.BOTTOM,
               backgroundColor: Colors.orange,
               colorText: Colors.white,
@@ -369,22 +294,17 @@ class UserTypeSelectionView extends StatelessWidget {
         }
       },
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: color.withOpacity(0.1),
+              child: Icon(icon, color: color, size: 22),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -400,15 +320,15 @@ class UserTypeSelectionView extends StatelessWidget {
                   ),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade600,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios, size: 16),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
           ],
         ),
       ),

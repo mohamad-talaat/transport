@@ -70,13 +70,18 @@ class MapControllerr extends GetxController {
     try {
       // الحصول على الموقع الحالي
       LatLng? location = await _locationService.getCurrentLocation();
+      if (location != null) {
+        currentLocation.value = location;
+        mapCenter.value = location;
+        currentAddress.value = _locationService.currentAddress.value;
+        // تحريك الخريطة إلى الموقع الحالي
 
-      currentLocation.value = location;
-      mapCenter.value = location!;
-      currentAddress.value = _locationService.currentAddress.value;
-
-      // تحريك الخريطة إلى الموقع الحالي
-      moveToLocation(location);
+        moveToLocation(location);
+        isMapReady.value = true;
+      } else {
+        logger.w("تعذر الحصول على الموقع الحالي");
+        Get.snackbar("خطأ", "الموقع غير متاح حالياً");
+      }
 
       isMapReady.value = true;
     } catch (e) {
@@ -194,50 +199,56 @@ class MapControllerr extends GetxController {
         child: SizedBox(
           width: 60,
           height: 60,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.red,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Flexible(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(height: 2),
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.red,
-                  border: Border.all(color: Colors.white, width: 1.5),
+                const SizedBox(height: 2),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.red,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Colors.white,
+                    size: 12,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.location_on,
-                  color: Colors.white,
-                  size: 12,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

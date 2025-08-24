@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/services/notification_service.dart';
+import 'package:transport_app/routes/app_routes.dart';
 
 class RiderSettingsView extends StatelessWidget {
   const RiderSettingsView({super.key});
@@ -37,6 +38,17 @@ class RiderSettingsView extends StatelessWidget {
                 onChanged: (v) => notificationService
                     .updateNotificationSettings(vibration: v),
               )),
+          const SizedBox(height: 24),
+          const Text('رفع الصور',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload),
+            title: const Text('إعدادات رفع الصور'),
+            subtitle: const Text('اختر طريقة رفع الصور المفضلة'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => Get.toNamed(AppRoutes.IMAGE_UPLOAD_SETTINGS),
+          ),
         ],
       ),
     );

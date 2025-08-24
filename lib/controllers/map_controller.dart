@@ -38,6 +38,10 @@ class MapControllerr extends GetxController {
   final RxString selectedAddress = ''.obs;
   final RxBool isSearching = false.obs;
 
+  // Middle stop (waypoint)
+  final Rx<LatLng?> middleStopLocation = Rx<LatLng?>(null);
+  final RxString middleStopAddress = ''.obs;
+
   // Trip tracking
   final Rx<TripModel?> activeTrip = Rx<TripModel?>(null);
   final RxList<LatLng> tripRoute = <LatLng>[].obs;
@@ -46,6 +50,7 @@ class MapControllerr extends GetxController {
   // UI state
   final RxBool isLoading = false.obs;
   final TextEditingController searchController = TextEditingController();
+  final TextEditingController middleStopController = TextEditingController();
 
   // Services
   final LocationService _locationService = LocationService.to;
@@ -59,6 +64,10 @@ class MapControllerr extends GetxController {
     ever(currentLocation, (LatLng? location) {
       if (location != null) {
         _updateCurrentLocationMarker(location);
+        // تحديث المسار إذا كان هناك وجهة محددة
+        if (selectedLocation.value != null) {
+          _updateRouteToSelectedLocation(selectedLocation.value!);
+        }
       }
     });
   }
@@ -93,6 +102,78 @@ class MapControllerr extends GetxController {
 
   /// تحريك الخريطة إلى موقع معين
   void moveToLocation(LatLng location, {double zoom = 16.0}) {
+    mapCenter.value = location;
+    mapZoom.value = zoom;
+    mapController.move(location, zoom);
+  }
+
+  /// تهيئة الخريطة عند جاهزيتها
+  void onMapReady() {
+    isMapReady.value = true;
+    if (currentLocation.value != null) {
+      moveToLocation(currentLocation.value!);
+    }
+  }
+
+  /// عرض مسار الرحلة
+  void showTripRoute({
+    required LatLng pickup,
+    required LatLng destination,
+    List<LatLng>? routePolyline,
+  }) {
+    // إضافة علامات المواقع
+    markers.clear();
+    markers.addAll([
+      Marker(
+        point: pickup,
+        width: 40,
+        height: 40,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.green,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: const Icon(Icons.my_location, color: Colors.white, size: 20),
+        ),
+      ),
+      Marker(
+        point: destination,
+        width: 40,
+        height: 40,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.red,
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: const Icon(Icons.location_on, color: Colors.white, size: 20),
+        ),
+      ),
+    ]);
+
+    // إضافة مسار الرحلة
+    if (routePolyline != null && routePolyline.isNotEmpty) {
+      polylines.clear();
+      polylines.add(
+        Polyline(
+          points: routePolyline,
+          strokeWidth: 4,
+          color: Colors.blue,
+        ),
+      );
+    }
+
+    // تحريك الخريطة لتظهر المسار كاملاً
+    final allPoints = [pickup, destination];
+    if (routePolyline != null && routePolyline.isNotEmpty) {
+      allPoints.addAll(routePolyline);
+    }
+    _fitBoundsToRoute(allPoints);
+  }
+
+  /// تحريك الخريطة إلى موقع معين (طريقة بديلة)
+  void _moveToLocationInternal(LatLng location, {double zoom = 16.0}) {
     if (!isMapReady.value) return;
 
     try {
@@ -143,7 +224,140 @@ class MapControllerr extends GetxController {
 
     // مسح نتائج البحث
     searchResults.clear();
-    searchController.clear();
+    // ملء حقل البحث باسم الوجهة المختارة
+    searchController.text = result.name;
+
+    // تحديث البولي لاين والسهم إذا كان هناك موقع انطلاق محدد
+    _updateRouteToSelectedLocation(result.latLng);
+  }
+
+  /// تعيين محطة وسطى من نتيجة البحث
+  void setMiddleStopFromSearch(LocationSearchResult result) {
+    middleStopLocation.value = result.latLng;
+    middleStopAddress.value = result.address;
+
+    // ملء حقل نص المحطة الوسطى
+    middleStopController.text = result.name;
+
+    // إضافة علامة للمحطة الوسطى
+    _addMiddleStopMarker(result.latLng, result.name);
+
+    // مسح نتائج البحث فقط
+    searchResults.clear();
+
+    // تحديث المسار إذا كان هناك وجهة محددة
+    if (selectedLocation.value != null) {
+      _updateRouteToSelectedLocation(selectedLocation.value!);
+    }
+  }
+
+  void clearMiddleStop() {
+    middleStopLocation.value = null;
+    middleStopAddress.value = '';
+    markers.removeWhere((m) => m.key == const Key('middle_stop'));
+
+    // تحديث المسار إذا كان هناك وجهة محددة
+    if (selectedLocation.value != null) {
+      _updateRouteToSelectedLocation(selectedLocation.value!);
+    }
+  }
+
+  /// تحديث المسار إلى الموقع المحدد
+  void _updateRouteToSelectedLocation(LatLng destination) {
+    // إذا كان هناك موقع انطلاق محدد (الموقع الحالي أو موقع محدد مسبقاً)
+    LatLng? startLocation = currentLocation.value;
+
+    if (startLocation != null) {
+      // إنشاء مسار مباشر بين نقطة البداية والوجهة
+      List<LatLng> routePoints = [startLocation, destination];
+
+      // إضافة محطة وسطى إذا كانت موجودة
+      if (middleStopLocation.value != null) {
+        routePoints = [startLocation, middleStopLocation.value!, destination];
+      }
+
+      // تحديث البولي لاين
+      _updateRoutePolyline(routePoints);
+
+      // إضافة سهم اتجاه
+      _addDirectionArrow(routePoints);
+
+      // تحريك الخريطة لتظهر المسار كاملاً
+      _fitBoundsToRoute(routePoints);
+    }
+  }
+
+  /// تحديث البولي لاين للمسار
+  void _updateRoutePolyline(List<LatLng> routePoints) {
+    polylines.clear();
+    polylines.add(
+      Polyline(
+        points: routePoints,
+        strokeWidth: 4,
+        color: Colors.blue,
+      ),
+    );
+  }
+
+  /// إضافة سهم اتجاه للمسار
+  void _addDirectionArrow(List<LatLng> routePoints) {
+    if (routePoints.length < 2) return;
+
+    // إزالة الأسهم السابقة
+    markers.removeWhere((m) => m.key.toString().contains('direction_arrow'));
+
+    // إضافة سهم في منتصف المسار
+    for (int i = 0; i < routePoints.length - 1; i++) {
+      LatLng start = routePoints[i];
+      LatLng end = routePoints[i + 1];
+
+      // حساب نقطة منتصف المسار
+      LatLng midPoint = LatLng(
+        (start.latitude + end.latitude) / 2,
+        (start.longitude + end.longitude) / 2,
+      );
+
+      // حساب اتجاه السهم
+      double bearing = _calculateBearing(start, end);
+
+      markers.add(
+        Marker(
+          key: Key('direction_arrow_$i'),
+          point: midPoint,
+          width: 30,
+          height: 30,
+          child: Transform.rotate(
+            angle: bearing * (math.pi / 180), // تحويل الدرجات إلى راديان
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.arrow_forward,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  /// حساب اتجاه السهم بين نقطتين
+  double _calculateBearing(LatLng start, LatLng end) {
+    double lat1 = start.latitude * (math.pi / 180);
+    double lat2 = end.latitude * (math.pi / 180);
+    double dLon = (end.longitude - start.longitude) * (math.pi / 180);
+
+    double y = math.sin(dLon) * math.cos(lat2);
+    double x = math.cos(lat1) * math.sin(lat2) -
+        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+
+    double bearing = math.atan2(y, x) * (180 / math.pi);
+    return (bearing + 360) % 360;
   }
 
   /// إضافة علامة الموقع الحالي
@@ -178,6 +392,33 @@ class MapControllerr extends GetxController {
             color: Colors.white,
             size: 20,
           ),
+        ),
+      ),
+    );
+  }
+
+  void _addMiddleStopMarker(LatLng location, String title) {
+    markers.removeWhere((marker) => marker.key == const Key('middle_stop'));
+    markers.add(
+      Marker(
+        key: const Key('middle_stop'),
+        point: location,
+        width: 50,
+        height: 50,
+        child: Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.orange,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(Icons.stop_circle, color: Colors.white, size: 22),
         ),
       ),
     );
@@ -296,26 +537,37 @@ class MapControllerr extends GetxController {
     );
   }
 
-  /// رسم مسار الرحلة
-  void drawTripRoute(List<LatLng> routePoints) {
+  /// رسم مسار الرحلة (يدعم تقسيم المسار وتلوين كل مقطع بلون مختلف)
+  void drawTripRoute(List<LatLng> routePoints, {List<int>? splitIndices}) {
     if (routePoints.isEmpty) return;
 
     // مسح المسارات السابقة
-    // Remove previous trip route polyline by checking a custom condition (e.g., color and strokeWidth)
-    polylines.removeWhere((polyline) =>
-        polyline.color == Colors.blue && polyline.strokeWidth == 4.0);
+    polylines.clear();
 
-    // إضافة المسار الجديد
-    polylines.add(
-      Polyline(
-        points: routePoints,
-        color: Colors.blue,
-        strokeWidth: 4.0,
-        // pattern: const StrokePattern.solid(),
-      ),
-    );
+    // تقسيم المسار عند نقاط محددة (مثلاً: [indexOfMiddle])
+    if (splitIndices != null && splitIndices.isNotEmpty) {
+      final indices = [
+        0,
+        ...splitIndices.where((i) => i > 0 && i < routePoints.length),
+        routePoints.length - 1
+      ];
+      for (int i = 0; i < indices.length - 1; i++) {
+        final start = indices[i];
+        final end = indices[i + 1];
+        if (end - start < 1) continue;
+        final color = i == 0
+            ? Colors.green // من الموقع الحالي حتى المحطة الوسطى
+            : Colors.red; // من المحطة الوسطى حتى الوجهة
+        polylines.add(Polyline(
+            points: routePoints.sublist(start, end + 1),
+            color: color,
+            strokeWidth: 4.0));
+      }
+    } else {
+      polylines.add(
+          Polyline(points: routePoints, color: Colors.blue, strokeWidth: 4.0));
+    }
 
-    // تعديل حدود الخريطة لتشمل كامل المسار
     _fitBoundsToRoute(routePoints);
   }
 
@@ -460,6 +712,7 @@ class MapControllerr extends GetxController {
   @override
   void onClose() {
     searchController.dispose();
+    middleStopController.dispose();
     super.onClose();
   }
 }

@@ -13,7 +13,7 @@ class UserTypeSelectionView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color.fromARGB(255, 243, 241, 233),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -38,46 +38,48 @@ class UserTypeSelectionView extends StatelessWidget {
     return Column(
       children: [
         Container(
-          width: 140,
-          height: 140,
+          width: 200,
+          height: 200,
           decoration: BoxDecoration(
-            color: Colors.amber.shade400,
+            color: Colors.amber.shade300,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: Colors.amber.withOpacity(0.4),
+                color: Colors.amber.withOpacity(0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 8),
               ),
             ],
           ),
-          child: Image.asset(
-            "assets/images/taxi.jpg",
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.error, size: 40, color: Colors.red),
-
-            // ClipOval(
-            //   child: Image.asset(
-            //     "assets/images/taxi.jpg",
-            //     fit: BoxFit.cover,
-            //   ),
+          child: ClipOval(
+            child: Image.asset(
+              "assets/images/t.jpg",
+              // fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => Container(
+                color: Colors.amber.shade200,
+                child:
+                    const Icon(Icons.local_taxi, size: 60, color: Colors.amber),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 24),
         const Text(
           'تكسي البصرة',
           style: TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
             color: Colors.black87,
+            letterSpacing: 1.2,
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'اختر وسيلة الدخول للبدء',
           style: TextStyle(
-            fontSize: 16,
+            fontSize: 17,
             color: Colors.grey.shade600,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
@@ -200,21 +202,82 @@ class UserTypeSelectionView extends StatelessWidget {
             ],
           ),
         ),
+
         const SizedBox(height: 20),
         GestureDetector(
           onTap: () {
-            _showUserTypeDialog('signup');
+            Get.toNamed('/admin-dashboard');
           },
-          child: Text(
-            'إنشاء حساب جديد',
-            style: TextStyle(
-              fontSize: 15,
-              color: Colors.blue.shade700,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.underline,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.amber.shade300),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.admin_panel_settings,
+                    size: 18, color: Colors.amber.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  'داشبورد الإدارة',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.amber.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: () {
+            Get.toNamed('/mock-testing');
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.blue.shade300),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.science, size: 18, color: Colors.blue.shade700),
+                const SizedBox(width: 8),
+                Text(
+                  'اختبار وهمي - العراق',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.blue.shade700,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // const SizedBox(height: 20),
+        // GestureDetector(
+        //   onTap: () {
+        //     _showUserTypeDialog('signup');
+        //   },
+        //   child: Text(
+        //     'إنشاء حساب جديد',
+        //     style: TextStyle(
+        //       fontSize: 15,
+        //       color: Colors.blue.shade700,
+        //       fontWeight: FontWeight.w600,
+        //       decoration: TextDecoration.underline,
+        //     ),
+        //   ),
+        // ),
       ],
     );
   }

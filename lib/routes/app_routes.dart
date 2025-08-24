@@ -3,14 +3,15 @@ class AppRoutes {
   static const SPLASH = '/splash';
   static const ONBOARDING = '/onboarding';
   static const USER_TYPE_SELECTION = '/user-type-selection';
-  
+
   // مسارات التوثيق
   static const PHONE_AUTH = '/phone-auth';
   static const VERIFY_OTP = '/verify-otp';
   static const COMPLETE_PROFILE = '/complete-profile';
-  
+
   // مسارات الراكب (Rider)
   static const RIDER_HOME = '/rider-home';
+  static const RIDER_SEARCHING = '/rider-searching';
   static const RIDER_PROFILE = '/rider-profile';
   static const RIDER_WALLET = '/rider-wallet';
   static const RIDER_ADD_BALANCE = '/rider-add-balance';
@@ -21,10 +22,12 @@ class AppRoutes {
   static const RIDER_SETTINGS = '/rider-settings';
   static const RIDER_ABOUT = '/rider-about';
   static const RIDER_HELP = '/rider-help';
-  
+
   // مسارات السائق (Driver)
   static const DRIVER_HOME = '/driver-home';
   static const DRIVER_PROFILE = '/driver-profile';
+  static const DRIVER_PROFILE_EDIT = '/driver-profile-edit';
+  static const DRIVER_PROFILE_COMPLETION = '/driver-profile-completion';
   static const DRIVER_WALLET = '/driver-wallet';
   static const DRIVER_EARNINGS = '/driver-earnings';
   static const DRIVER_TRIP_HISTORY = '/driver-trip-history';
@@ -36,4 +39,13 @@ class AppRoutes {
   static const DRIVER_VEHICLE = '/driver-vehicle';
   static const DRIVER_ABOUT = '/driver-about';
   static const DRIVER_HELP = '/driver-help';
+
+  // مسارات الإدارة (Admin)
+  static const ADMIN_DASHBOARD = '/admin-dashboard';
+
+  // مسارات الإعدادات
+  static const IMAGE_UPLOAD_SETTINGS = '/image-upload-settings';
+
+  // مسارات الاختبار (Testing)
+  static const MOCK_TESTING = '/mock-testing';
 }

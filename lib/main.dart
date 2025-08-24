@@ -2,12 +2,24 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'firebase_options.dart';
 import 'package:transport_app/controllers/app_controller.dart';
 import 'package:transport_app/routes/app_pages.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
 import 'package:transport_app/services/notification_service.dart';
+import 'package:transport_app/services/app_settings_service.dart';
+import 'package:transport_app/services/image_upload_service.dart';
+import 'package:transport_app/services/free_image_upload_service.dart';
+import 'package:transport_app/services/local_image_service.dart';
+import 'package:transport_app/services/smart_image_service.dart';
+import 'package:transport_app/services/mock_testing_service.dart';
+import 'package:transport_app/services/driver_payment_service.dart';
+import 'package:transport_app/services/driver_discount_service.dart';
+import 'package:transport_app/services/firebase_service.dart';
+import 'package:transport_app/services/driver_profile_service.dart';
 import 'package:logger/logger.dart';
+import 'package:transport_app/controllers/auth_controller.dart';
 
 var logger = Logger(
   printer: PrettyPrinter(),
@@ -20,10 +32,15 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // تهيئة Firebase
-
-  await Firebase.initializeApp(
-      // options: DefaultFirebaseOptions.currentPlatform,
-      );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    logger.i('تم تهيئة Firebase بنجاح');
+  } catch (e) {
+    logger.e('خطأ في تهيئة Firebase: $e');
+    // يمكنك إضافة معالجة إضافية هنا
+  }
   // تهيئة الخدمات
   await initServices();
 
@@ -37,11 +54,44 @@ Future<void> initServices() async {
     // 1. AppController (يجب أن يكون الأول)
     Get.put(AppController());
 
-    // 2. NotificationService
+    // 2. AuthController مبكراً لضمان استعادة الجلسة قبل شاشة السبلاش
+    Get.put(AuthController(), permanent: true);
+
+    // 3. NotificationService
     await Get.putAsync(() => NotificationService().init());
 
-    // 3. LocationService
+    // 4. LocationService
     await Get.putAsync(() => LocationService().init());
+
+    // 5. AppSettingsService
+    await Get.putAsync(() => AppSettingsService().init());
+
+    // 6. ImageUploadService
+    Get.put(ImageUploadService(), permanent: true);
+
+    // 7. FreeImageUploadService (ImgBB)
+    Get.put(FreeImageUploadService(), permanent: true);
+
+    // 8. LocalImageService
+    Get.put(LocalImageService(), permanent: true);
+
+    // 9. SmartImageService
+    Get.put(SmartImageService(), permanent: true);
+
+    // 10. MockTestingService
+    Get.put(MockTestingService(), permanent: true);
+
+    // 11. DriverPaymentService
+    Get.put(DriverPaymentService(), permanent: true);
+
+    // 12. DriverDiscountService
+    Get.put(DriverDiscountService(), permanent: true);
+
+    // 13. FirebaseService
+    Get.put(FirebaseService(), permanent: true);
+
+    // 14. DriverProfileService
+    Get.put(DriverProfileService(), permanent: true);
 
     logger.i('تم تهيئة جميع الخدمات بنجاح');
   } catch (e) {

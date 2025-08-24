@@ -8,6 +8,8 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:transport_app/main.dart';
 import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
+import 'package:transport_app/services/driver_profile_service.dart'
+    hide logger, Timestamp;
 import 'package:shared_preferences/shared_preferences.dart';
 
 // import '../views/rider/location_permission_screen.dart';
@@ -104,8 +106,18 @@ class AuthController extends GetxController {
           await _firestore.collection('users').doc(uid).get();
 
       if (doc.exists) {
-        currentUser.value =
-            UserModel.fromMap(doc.data() as Map<String, dynamic>);
+        final data = doc.data() as Map<String, dynamic>;
+
+        // إضافة حقل isProfileComplete إذا لم يكن موجوداً
+        if (data['userType'] == 'driver' &&
+            !data.containsKey('isProfileComplete')) {
+          await _firestore.collection('users').doc(uid).update({
+            'isProfileComplete': false,
+          });
+          data['isProfileComplete'] = false;
+        }
+
+        currentUser.value = UserModel.fromMap(data);
       } else {
         currentUser.value = null;
       }
@@ -120,6 +132,43 @@ class AuthController extends GetxController {
     if (currentUser.value?.userType == UserType.rider) {
       Get.offAllNamed(AppRoutes.RIDER_HOME);
     } else if (currentUser.value?.userType == UserType.driver) {
+      _checkDriverProfileAndNavigate();
+    }
+  }
+
+  /// التحقق من اكتمال بروفايل السائق والتوجيه
+  Future<void> _checkDriverProfileAndNavigate() async {
+    try {
+      final userId = currentUser.value?.id;
+      if (userId == null) {
+        Get.offAllNamed(AppRoutes.DRIVER_HOME);
+        return;
+      }
+
+      // التحقق من اكتمال البروفايل
+      final profileService = Get.find<DriverProfileService>();
+      final isComplete = await profileService.isProfileComplete(userId);
+
+      if (!isComplete) {
+        // إذا لم يكمل البروفايل، توجيه لشاشة الإكمال
+        Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
+        return;
+      }
+
+      // التحقق من موافقة الإدارة
+      final isApproved = await profileService.isDriverApproved(userId);
+
+      if (!isApproved) {
+        // إذا لم يتم الموافقة عليه، توجيه لشاشة الإكمال مع رسالة
+        Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
+        return;
+      }
+
+      // إذا اكتمل البروفايل وتمت الموافقة، توجيه للشاشة الرئيسية
+      Get.offAllNamed(AppRoutes.DRIVER_HOME);
+    } catch (e) {
+      logger.w('خطأ في التحقق من بروفايل السائق: $e');
+      // في حالة الخطأ، توجيه للشاشة الرئيسية
       Get.offAllNamed(AppRoutes.DRIVER_HOME);
     }
   }
@@ -330,23 +379,54 @@ class AuthController extends GetxController {
         }
       } else {
         // مستخدم جديد - إنشاء حساب
-        UserModel newUser = UserModel(
-          id: firebaseUser.uid,
-          name: userInfo['name'] ?? 'مستخدم جديد',
-          phone: firebaseUser.phoneNumber ?? '',
-          email: userInfo['email'] ?? firebaseUser.email ?? '',
-          profileImage: userInfo['profileImage'],
-          userType: selectedUserType.value!,
-          createdAt: DateTime.now(),
-        );
+        Map<String, dynamic> userData = {
+          'id': firebaseUser.uid,
+          'name': userInfo['name'] ?? 'مستخدم جديد',
+          'phone': firebaseUser.phoneNumber ?? '',
+          'email': userInfo['email'] ?? firebaseUser.email ?? '',
+          'profileImage': userInfo['profileImage'],
+          'userType': selectedUserType.value!.name,
+          'balance': 0.0,
+          'createdAt': DateTime.now(),
+          'isActive': true,
+          'isVerified': false,
+          'isApproved': false,
+          'isRejected': false,
+        };
+
+        // إضافة بيانات إضافية للسائق
+        if (selectedUserType.value == UserType.driver) {
+          userData['additionalData'] = {
+            'carType': '',
+            'carModel': '',
+            'carColor': '',
+            'carYear': '',
+            'carNumber': '',
+            'licenseNumber': '',
+            'workingAreas': [],
+            'carImage': null,
+            'licenseImage': null,
+            'idCardImage': null,
+            'vehicleRegistrationImage': null,
+            'insuranceImage': null,
+            'isProfileComplete': false,
+            'isOnline': false,
+            'isAvailable': true,
+            'currentLat': null,
+            'currentLng': null,
+          };
+          userData['isProfileComplete'] = false;
+        }
 
         try {
           // حفظ البيانات في Firestore
           await _firestore
               .collection('users')
-              .doc(newUser.id)
-              .set(newUser.toMap());
-          currentUser.value = newUser;
+              .doc(firebaseUser.uid)
+              .set(userData);
+
+          // تحميل البيانات المحلية
+          await loadUserData(firebaseUser.uid);
 
           Get.snackbar(
             'مرحباً بك',
@@ -629,6 +709,50 @@ class AuthController extends GetxController {
       backgroundColor: Colors.orange,
       colorText: Colors.white,
     );
+  }
+
+  /// تحديث حالة الموافقة على السائق (للأدمن)
+  Future<bool> approveDriver(String driverId) async {
+    try {
+      final adminId = currentUser.value?.id;
+      if (adminId == null) throw Exception('لم يتم العثور على معرف الأدمن');
+
+      await _firestore.collection('users').doc(driverId).update({
+        'isApproved': true,
+        'approvedAt': DateTime.now(),
+        'approvedBy': adminId,
+        'isRejected': false,
+        'rejectionReason': null,
+        'updatedAt': DateTime.now(),
+      });
+
+      return true;
+    } catch (e) {
+      logger.w('خطأ في الموافقة على السائق: $e');
+      return false;
+    }
+  }
+
+  /// رفض السائق (للأدمن)
+  Future<bool> rejectDriver(String driverId, String reason) async {
+    try {
+      final adminId = currentUser.value?.id;
+      if (adminId == null) throw Exception('لم يتم العثور على معرف الأدمن');
+
+      await _firestore.collection('users').doc(driverId).update({
+        'isRejected': true,
+        'rejectionReason': reason,
+        'rejectedAt': DateTime.now(),
+        'rejectedBy': adminId,
+        'isApproved': false,
+        'updatedAt': DateTime.now(),
+      });
+
+      return true;
+    } catch (e) {
+      logger.w('خطأ في رفض السائق: $e');
+      return false;
+    }
   }
 
   // String _formatPhoneNumber(String phone) {

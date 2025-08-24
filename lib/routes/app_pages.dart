@@ -17,6 +17,7 @@ import 'package:transport_app/views/splash_view.dart';
 
 // Rider Views
 import 'package:transport_app/views/rider/rider_home_view.dart';
+import 'package:transport_app/views/rider/rider_searching_view.dart';
 import 'package:transport_app/views/rider/rider_wallet_view.dart';
 import 'package:transport_app/views/rider/rider_trip_history_view.dart';
 import 'package:transport_app/views/rider/trip_tracking_view.dart';
@@ -27,12 +28,28 @@ import 'package:transport_app/views/rider/rider_notifications_view.dart';
 import 'package:transport_app/views/rider/add_balance_view.dart';
 
 // Driver Views
-import 'package:transport_app/views/driver/driver_home_view.dart';
+import 'package:transport_app/views/driver/driver_home_improved_view.dart';
 import 'package:transport_app/views/driver/driver_trip_tracking_view.dart';
 import 'package:transport_app/views/driver/driver_trip_history_view.dart';
 import 'package:transport_app/views/driver/driver_wallet_view.dart';
+import 'package:transport_app/views/driver/driver_profile_completion_view.dart';
+import 'package:transport_app/views/driver/driver_profile_edit_view.dart';
 // import 'package:transport_app/views/driver/driver_profile_view.dart';
 import 'package:transport_app/views/rider/rider_trip_details_view.dart';
+
+// Admin Views
+import 'package:transport_app/views/admin/admin_dashboard_view.dart';
+
+// Settings Views
+import 'package:transport_app/views/settings/image_upload_settings_view.dart';
+
+// Services
+import 'package:transport_app/services/image_upload_service.dart';
+import 'package:transport_app/services/mock_testing_service.dart';
+
+// Testing Views
+import 'package:transport_app/views/testing/mock_testing_view.dart';
+import 'package:transport_app/services/notification_service.dart';
 
 class AppPages {
   static const INITIAL = AppRoutes.SPLASH;
@@ -69,6 +86,21 @@ class AppPages {
       page: () => const RiderHomeView(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => MapControllerr());
+        Get.lazyPut(() => TripController());
+      }),
+    ),
+    GetPage(
+      name: AppRoutes.RIDER_SEARCHING,
+      page: () {
+        final args = Get.arguments as Map<String, dynamic>?;
+        return RiderSearchingView(
+          pickup: args?['pickup'],
+          destination: args?['destination'],
+          estimatedFare: args?['estimatedFare'] ?? 0.0,
+          estimatedDuration: args?['estimatedDuration'] ?? 0,
+        );
+      },
+      binding: BindingsBuilder(() {
         Get.lazyPut(() => TripController());
       }),
     ),
@@ -114,8 +146,15 @@ class AppPages {
 
     // Driver Routes
     GetPage(
+      name: AppRoutes.DRIVER_PROFILE_COMPLETION,
+      page: () => const DriverProfileCompletionView(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => ImageUploadService());
+      }),
+    ),
+    GetPage(
       name: AppRoutes.DRIVER_HOME,
-      page: () => DriverHomeView(),
+      page: () => const DriverHomeImprovedView(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => DriverController());
         Get.lazyPut(() => MapControllerr());
@@ -123,36 +162,69 @@ class AppPages {
     ),
     GetPage(
       name: AppRoutes.DRIVER_TRIP_TRACKING,
-      page: () => DriverTripTrackingView(),
+      page: () => const DriverTripTrackingView(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => MapControllerr());
       }),
     ),
     GetPage(
       name: AppRoutes.DRIVER_TRIP_HISTORY,
-      page: () => DriverTripHistoryView(),
+      page: () => const DriverTripHistoryView(),
     ),
     GetPage(
       name: AppRoutes.DRIVER_WALLET,
-      page: () => DriverWalletView(),
+      page: () => const DriverWalletView(),
     ),
     GetPage(
       name: AppRoutes.DRIVER_EARNINGS,
-      page: () => DriverWalletView(), // نفس شاشة المحفظة مؤقتاً
+      page: () => const DriverWalletView(), // نفس شاشة المحفظة مؤقتاً
     ),
     GetPage(
       name: AppRoutes.DRIVER_PROFILE,
-      page: () => DriverProfileView(),
+      page: () => const DriverProfileView(),
+    ),
+    GetPage(
+      name: AppRoutes.DRIVER_PROFILE_EDIT,
+      page: () => const DriverProfileEditView(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => ImageUploadService());
+      }),
     ),
     GetPage(
       name: AppRoutes.DRIVER_SETTINGS,
-      page: () => DriverSettingsView(),
+      page: () => const DriverSettingsView(),
+    ),
+
+    // Admin Routes
+    GetPage(
+      name: AppRoutes.ADMIN_DASHBOARD,
+      page: () => const AdminDashboardView(),
+      binding: BindingsBuilder(() {
+        // AppSettingsService is already initialized in main.dart
+      }),
+    ),
+
+    // Settings Routes
+    GetPage(
+      name: AppRoutes.IMAGE_UPLOAD_SETTINGS,
+      page: () => const ImageUploadSettingsView(),
+    ),
+
+    // Testing Routes
+    GetPage(
+      name: AppRoutes.MOCK_TESTING,
+      page: () => const MockTestingView(),
+      binding: BindingsBuilder(() {
+        Get.lazyPut(() => MockTestingService());
+      }),
     ),
   ];
 }
 
 // شاشات إضافية للسائق سيتم إنشاؤها لاحقاً
 class DriverProfileView extends StatelessWidget {
+  const DriverProfileView({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -169,16 +241,54 @@ class DriverProfileView extends StatelessWidget {
 }
 
 class DriverSettingsView extends StatelessWidget {
+  const DriverSettingsView({super.key});
+
   @override
   Widget build(BuildContext context) {
+    final notificationService = NotificationService.to;
     return Scaffold(
       appBar: AppBar(
         title: const Text('الإعدادات'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
+        centerTitle: true,
       ),
-      body: const Center(
-        child: Text('شاشة الإعدادات للسائق - قيد التطوير'),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text('الإشعارات',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Obx(() => SwitchListTile(
+                title: const Text('تفعيل الإشعارات'),
+                value: notificationService.notificationsEnabled.value,
+                onChanged: (v) =>
+                    notificationService.updateNotificationSettings(enabled: v),
+              )),
+          Obx(() => SwitchListTile(
+                title: const Text('الصوت'),
+                value: notificationService.soundEnabled.value,
+                onChanged: (v) =>
+                    notificationService.updateNotificationSettings(sound: v),
+              )),
+          Obx(() => SwitchListTile(
+                title: const Text('الاهتزاز'),
+                value: notificationService.vibrationEnabled.value,
+                onChanged: (v) => notificationService
+                    .updateNotificationSettings(vibration: v),
+              )),
+          const SizedBox(height: 24),
+          const Text('رفع الصور',
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          ListTile(
+            leading: const Icon(Icons.cloud_upload),
+            title: const Text('إعدادات رفع الصور'),
+            subtitle: const Text('اختر طريقة رفع الصور المفضلة'),
+            trailing: const Icon(Icons.arrow_forward_ios),
+            onTap: () => Get.toNamed(AppRoutes.IMAGE_UPLOAD_SETTINGS),
+          ),
+        ],
       ),
     );
   }

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
-import 'package:transport_app/models/user_model.dart';
+import 'package:transport_app/routes/app_routes.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DriverProfileView extends StatelessWidget {
-  DriverProfileView({Key? key}) : super(key: key);
+  DriverProfileView({super.key});
 
   final AuthController authController = AuthController.to;
   final DriverController driverController = Get.find();
@@ -27,11 +28,174 @@ class DriverProfileView extends StatelessWidget {
               _buildStatistics(),
               const SizedBox(height: 20),
               _buildActions(),
+              const SizedBox(height: 20),
+              _buildDebugSection(), // إضافة قسم للتصحيح
             ],
           ),
         ),
       ),
     );
+  }
+
+  // إضافة قسم للتصحيح وحل مشكلة cache
+  Widget _buildDebugSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bug_report, color: Colors.orange.shade700),
+              const SizedBox(width: 8),
+              Text(
+                'إعدادات التطبيق',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _clearAppCache(),
+                  icon: const Icon(Icons.clear_all, size: 18),
+                  label: const Text('مسح Cache'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => _resetUserData(),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('إعادة تعيين'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // مسح cache التطبيق
+  Future<void> _clearAppCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // مسح البيانات المحفوظة
+      await prefs.clear();
+
+      Get.snackbar(
+        'تم المسح',
+        'تم مسح cache التطبيق بنجاح',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+
+      // إعادة تحميل البيانات
+      await authController
+          .loadUserData(authController.currentUser.value?.id ?? '');
+    } catch (e) {
+      Get.snackbar(
+        'خطأ',
+        'حدث خطأ أثناء مسح cache: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
+  }
+
+  // إعادة تعيين بيانات المستخدم
+  Future<void> _resetUserData() async {
+    try {
+      Get.dialog(
+        AlertDialog(
+          title: const Text('تأكيد إعادة التعيين'),
+          content: const Text('هل أنت متأكد من إعادة تعيين جميع البيانات؟'),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(),
+              child: const Text('إلغاء'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Get.back();
+                await _performReset();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('إعادة تعيين'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      print('خطأ في إعادة التعيين: $e');
+    }
+  }
+
+  Future<void> _performReset() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // مسح جميع البيانات المحفوظة
+      await prefs.clear();
+
+      // إعادة تحميل بيانات المستخدم من Firebase
+      if (authController.currentUser.value?.id != null) {
+        await authController
+            .loadUserData(authController.currentUser.value!.id!);
+      }
+
+      Get.snackbar(
+        'تم إعادة التعيين',
+        'تم إعادة تعيين جميع البيانات بنجاح',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+
+      // إعادة تحميل الصفحة
+      Get.forceAppUpdate();
+    } catch (e) {
+      Get.snackbar(
+        'خطأ',
+        'حدث خطأ أثناء إعادة التعيين: $e',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 
   Widget _buildHeader() {
@@ -71,91 +235,64 @@ class DriverProfileView extends StatelessWidget {
           ),
           const SizedBox(height: 30),
           Obx(() => Column(
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 4),
-                  image: authController.currentUser.value?.profileImage != null
-                      ? DecorationImage(
-                          image: NetworkImage(authController.currentUser.value!.profileImage!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                ),
-                child: authController.currentUser.value?.profileImage == null
-                    ? const Icon(Icons.person, size: 50, color: Colors.white)
-                    : null,
-              ),
-              const SizedBox(height: 15),
-              Text(
-                authController.currentUser.value?.name ?? 'السائق',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.star, color: Colors.yellow, size: 20),
-                  const SizedBox(width: 5),
-                  const Text(
-                    '4.8',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 4),
+                      image:
+                          authController.currentUser.value?.profileImage != null
+                              ? DecorationImage(
+                                  image: NetworkImage(authController
+                                      .currentUser.value!.profileImage!),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
                     ),
+                    child:
+                        authController.currentUser.value?.profileImage == null
+                            ? const Icon(Icons.person,
+                                size: 50, color: Colors.white)
+                            : null,
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(height: 15),
                   Text(
-                    '(152 تقييم)',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 14,
+                    authController.currentUser.value?.name ?? 'السائق',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const SizedBox(height: 5),
+                  Obx(() {
+                    final user = authController.currentUser.value;
+                    String statusText = 'سائق نشط';
+                    Color statusColor = Colors.white.withOpacity(0.8);
+
+                    if (user?.isApproved == true) {
+                      statusText = 'سائق موافق عليه';
+                      statusColor = Colors.green.shade200;
+                    } else if (user?.isRejected == true) {
+                      statusText = 'تم رفض الطلب';
+                      statusColor = Colors.red.shade200;
+                    } else {
+                      statusText = 'في انتظار الموافقة';
+                      statusColor = Colors.orange.shade200;
+                    }
+
+                    return Text(
+                      statusText,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontSize: 16,
+                      ),
+                    );
+                  }),
                 ],
-              ),
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                decoration: BoxDecoration(
-                  color: driverController.isOnline.value 
-                      ? Colors.green 
-                      : Colors.grey,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      driverController.isOnline.value ? 'متصل' : 'غير متصل',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          )),
+              )),
         ],
       ),
     );
@@ -188,29 +325,30 @@ class DriverProfileView extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Obx(() => Column(
-            children: [
-              _buildInfoItem(
-                'الاسم',
-                authController.currentUser.value?.name ?? '',
-                Icons.person,
-              ),
-              _buildInfoItem(
-                'البريد الإلكتروني',
-                authController.currentUser.value?.email ?? '',
-                Icons.email,
-              ),
-              _buildInfoItem(
-                'رقم الهاتف',
-                authController.currentUser.value?.phone ?? '',
-                Icons.phone,
-              ),
-              _buildInfoItem(
-                'تاريخ التسجيل',
-                _formatDate(authController.currentUser.value?.createdAt ?? DateTime.now()),
-                Icons.date_range,
-              ),
-            ],
-          )),
+                children: [
+                  _buildInfoItem(
+                    'الاسم',
+                    authController.currentUser.value?.name ?? '',
+                    Icons.person,
+                  ),
+                  _buildInfoItem(
+                    'البريد الإلكتروني',
+                    authController.currentUser.value?.email ?? '',
+                    Icons.email,
+                  ),
+                  _buildInfoItem(
+                    'رقم الهاتف',
+                    authController.currentUser.value?.phone ?? '',
+                    Icons.phone,
+                  ),
+                  _buildInfoItem(
+                    'تاريخ التسجيل',
+                    _formatDate(authController.currentUser.value?.createdAt ??
+                        DateTime.now()),
+                    Icons.date_range,
+                  ),
+                ],
+              )),
         ],
       ),
     );
@@ -254,13 +392,28 @@ class DriverProfileView extends StatelessWidget {
           Obx(() {
             final user = authController.currentUser.value;
             final additionalData = user?.additionalData ?? {};
-            
+
             return Column(
               children: [
                 _buildInfoItem(
                   'نوع السيارة',
                   additionalData['carType'] ?? 'غير محدد',
                   Icons.directions_car,
+                ),
+                _buildInfoItem(
+                  'موديل السيارة',
+                  additionalData['carModel'] ?? 'غير محدد',
+                  Icons.model_training,
+                ),
+                _buildInfoItem(
+                  'لون السيارة',
+                  additionalData['carColor'] ?? 'غير محدد',
+                  Icons.color_lens,
+                ),
+                _buildInfoItem(
+                  'سنة الصنع',
+                  additionalData['carYear'] ?? 'غير محدد',
+                  Icons.calendar_today,
                 ),
                 _buildInfoItem(
                   'رقم اللوحة',
@@ -271,6 +424,13 @@ class DriverProfileView extends StatelessWidget {
                   'رقم الرخصة',
                   additionalData['licenseNumber'] ?? 'غير محدد',
                   Icons.credit_card,
+                ),
+                _buildInfoItem(
+                  'مناطق العمل',
+                  (additionalData['workingAreas'] as List<dynamic>?)
+                          ?.join(', ') ??
+                      'غير محدد',
+                  Icons.location_on,
                 ),
               ],
             );
@@ -283,28 +443,132 @@ class DriverProfileView extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.grey[200],
               borderRadius: BorderRadius.circular(10),
-              image: authController.currentUser.value?.additionalData?['carImage'] != null
+              image: authController
+                          .currentUser.value?.additionalData?['carImage'] !=
+                      null
                   ? DecorationImage(
-                      image: NetworkImage(authController.currentUser.value!.additionalData!['carImage']),
+                      image: NetworkImage(authController
+                          .currentUser.value!.additionalData!['carImage']),
                       fit: BoxFit.cover,
                     )
                   : null,
             ),
-            child: authController.currentUser.value?.additionalData?['carImage'] == null
-                ? const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.directions_car, size: 50, color: Colors.grey),
-                        SizedBox(height: 10),
-                        Text(
-                          'لا توجد صورة للمركبة',
-                          style: TextStyle(color: Colors.grey),
+            child:
+                authController.currentUser.value?.additionalData?['carImage'] ==
+                        null
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.directions_car,
+                                size: 50, color: Colors.grey),
+                            SizedBox(height: 10),
+                            Text(
+                              'لا توجد صورة للمركبة',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
                         ),
-                      ],
+                      )
+                    : null,
+          ),
+          const SizedBox(height: 15),
+          // قسم الوثائق
+          const Text(
+            'الوثائق المرفوعة',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Obx(() {
+            final additionalData =
+                authController.currentUser.value?.additionalData ?? {};
+            return Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDocumentItem(
+                        'رخصة القيادة',
+                        additionalData['licenseImage'],
+                        Icons.card_membership,
+                      ),
                     ),
-                  )
-                : null,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildDocumentItem(
+                        'الهوية الشخصية',
+                        additionalData['idCardImage'],
+                        Icons.badge,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildDocumentItem(
+                        'تسجيل السيارة',
+                        additionalData['vehicleRegistrationImage'],
+                        Icons.description,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildDocumentItem(
+                        'التأمين',
+                        additionalData['insuranceImage'],
+                        Icons.security,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentItem(String title, String? imageUrl, IconData icon) {
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: imageUrl != null ? Colors.green.shade50 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: imageUrl != null ? Colors.green : Colors.grey.shade300,
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: imageUrl != null ? Colors.green : Colors.grey,
+            size: 24,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: imageUrl != null
+                  ? Colors.green.shade700
+                  : Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            imageUrl != null ? 'مرفوع' : 'غير مرفوع',
+            style: TextStyle(
+              fontSize: 10,
+              color: imageUrl != null ? Colors.green : Colors.grey.shade500,
+            ),
           ),
         ],
       ),
@@ -354,9 +618,9 @@ class DriverProfileView extends StatelessWidget {
                     const SizedBox(width: 15),
                     Expanded(
                       child: _buildStatCard(
-                        'إجمالي الأرباح',
-                        '${stats['totalEarnings'].toStringAsFixed(2)} ج.م',
-                        Icons.monetization_on,
+                        'الربح اليومي',
+                        '${stats['todayEarnings']} جنيه',
+                        Icons.attach_money,
                         Colors.blue,
                       ),
                     ),
@@ -367,19 +631,19 @@ class DriverProfileView extends StatelessWidget {
                   children: [
                     Expanded(
                       child: _buildStatCard(
-                        'المسافة الكلية',
-                        '${stats['totalDistance'].toStringAsFixed(1)} كم',
-                        Icons.route,
-                        Colors.purple,
+                        'الربح الأسبوعي',
+                        '${stats['weekEarnings']} جنيه',
+                        Icons.trending_up,
+                        Colors.orange,
                       ),
                     ),
                     const SizedBox(width: 15),
                     Expanded(
                       child: _buildStatCard(
-                        'التقييم',
-                        '${stats['rating']}⭐',
-                        Icons.star,
-                        Colors.orange,
+                        'الربح الشهري',
+                        '${stats['monthEarnings']} جنيه',
+                        Icons.account_balance_wallet,
+                        Colors.purple,
                       ),
                     ),
                   ],
@@ -392,12 +656,14 @@ class DriverProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+      String title, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         children: [
@@ -411,11 +677,12 @@ class DriverProfileView extends StatelessWidget {
               color: color,
             ),
           ),
+          const SizedBox(height: 5),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: Colors.grey,
+              color: color.withOpacity(0.8),
             ),
             textAlign: TextAlign.center,
           ),
@@ -443,38 +710,70 @@ class DriverProfileView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'إجراءات',
+            'الإجراءات',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 20),
-          _buildActionItem(
-            'تغيير كلمة المرور',
-            Icons.lock,
+          _buildActionButton(
+            'تعديل الملف الشخصي',
+            Icons.edit,
             Colors.blue,
-            () => _showChangePassword(),
+            () => _showEditProfile(),
           ),
-          _buildActionItem(
-            'سياسة الخصوصية',
-            Icons.privacy_tip,
+          const SizedBox(height: 10),
+          _buildActionButton(
+            'تعديل معلومات المركبة',
+            Icons.directions_car,
             Colors.green,
-            () => _showPrivacyPolicy(),
+            () => _showEditVehicle(),
           ),
-          _buildActionItem(
-            'الشروط والأحكام',
-            Icons.description,
+          const SizedBox(height: 10),
+          _buildActionButton(
+            'إعدادات التطبيق',
+            Icons.settings,
             Colors.orange,
-            () => _showTermsAndConditions(),
+            () => _showSettings(),
           ),
-          _buildActionItem(
+          const SizedBox(height: 10),
+          _buildActionButton(
             'تسجيل الخروج',
             Icons.logout,
             Colors.red,
-            () => _showLogoutConfirmation(),
+            () => _logout(),
+          ),
+          const SizedBox(height: 10),
+          _buildActionButton(
+            'تحديث البيانات',
+            Icons.refresh,
+            Colors.blue,
+            () => _refreshProfile(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+      String title, IconData icon, Color color, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white),
+        label: Text(
+          title,
+          style: const TextStyle(color: Colors.white),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
       ),
     );
   }
@@ -485,11 +784,10 @@ class DriverProfileView extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
               color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: Colors.blue, size: 20),
           ),
@@ -505,11 +803,10 @@ class DriverProfileView extends StatelessWidget {
                     color: Colors.grey[600],
                   ),
                 ),
-                const SizedBox(height: 2),
                 Text(
                   value,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -521,100 +818,33 @@ class DriverProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildActionItem(String title, IconData icon, Color color, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 15),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.grey[50],
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey[200]!),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withOpacity(0.1),
-              ),
-              child: Icon(icon, color: color, size: 20),
-            ),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios, color: Colors.grey[400], size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 
   void _showEditProfile() {
-    Get.snackbar(
-      'قريباً',
-      'تعديل الملف الشخصي سيكون متاحاً قريباً',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-    );
+    Get.toNamed(AppRoutes.DRIVER_PROFILE_EDIT);
   }
 
   void _showEditVehicle() {
+    // TODO: تنفيذ تعديل معلومات المركبة
     Get.snackbar(
       'قريباً',
-      'تعديل معلومات المركبة سيكون متاحاً قريباً',
+      'سيتم إضافة هذه الميزة قريباً',
       snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
     );
   }
 
-  void _showChangePassword() {
+  void _showSettings() {
+    // TODO: تنفيذ الإعدادات
     Get.snackbar(
       'قريباً',
-      'تغيير كلمة المرور سيكون متاحاً قريباً',
+      'سيتم إضافة هذه الميزة قريباً',
       snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
     );
   }
 
-  void _showPrivacyPolicy() {
-    Get.snackbar(
-      'قريباً',
-      'سياسة الخصوصية ستكون متاحة قريباً',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-    );
-  }
-
-  void _showTermsAndConditions() {
-    Get.snackbar(
-      'قريباً',
-      'الشروط والأحكام ستكون متاحة قريباً',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: Colors.orange,
-      colorText: Colors.white,
-    );
-  }
-
-  void _showLogoutConfirmation() {
+  void _logout() {
     Get.dialog(
       AlertDialog(
         title: const Text('تسجيل الخروج'),
@@ -624,16 +854,58 @@ class DriverProfileView extends StatelessWidget {
             onPressed: () => Get.back(),
             child: const Text('إلغاء'),
           ),
-          ElevatedButton(
+          TextButton(
             onPressed: () {
               Get.back();
               authController.signOut();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('تسجيل الخروج', style: TextStyle(color: Colors.white)),
+            child: const Text('تأكيد'),
           ),
         ],
       ),
     );
+  }
+
+  void _refreshProfile() async {
+    try {
+      Get.dialog(
+        const AlertDialog(
+          content: Row(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(width: 16),
+              Text('جاري تحديث البيانات...'),
+            ],
+          ),
+        ),
+      );
+
+      // تحديث بيانات المستخدم من Firebase
+      if (authController.currentUser.value?.id != null) {
+        await authController.loadUserData(authController.currentUser.value!.id!);
+      }
+
+      // تحديث إحصائيات السائق
+      await driverController.loadEarningsData();
+
+      Get.back(); // إغلاق dialog التحميل
+
+      Get.snackbar(
+        'تم التحديث',
+        'تم تحديث البيانات بنجاح',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      Get.back(); // إغلاق dialog التحميل
+      Get.snackbar(
+        'خطأ',
+        'حدث خطأ أثناء تحديث البيانات',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    }
   }
 }

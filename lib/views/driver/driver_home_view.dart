@@ -1,268 +1,177 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
+import 'package:transport_app/controllers/driver_controller.dart';
+import 'package:transport_app/services/driver_profile_service.dart';
 import 'package:transport_app/routes/app_routes.dart';
 
-class DriverHomeView extends StatelessWidget {
-  DriverHomeView({Key? key}) : super(key: key);
+class DriverHomeView extends StatefulWidget {
+  const DriverHomeView({super.key});
 
-  final DriverController driverController = Get.put(DriverController());
-  final AuthController authController = AuthController.to;
+  @override
+  State<DriverHomeView> createState() => _DriverHomeViewState();
+}
+
+class _DriverHomeViewState extends State<DriverHomeView> {
+  final AuthController authController = Get.find<AuthController>();
+  final DriverController driverController = Get.find<DriverController>();
+  final DriverProfileService profileService = Get.find<DriverProfileService>();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkProfileCompletion();
+  }
+
+  /// التحقق من اكتمال بروفايل السائق
+  Future<void> _checkProfileCompletion() async {
+    try {
+      final userId = authController.currentUser.value?.id;
+      if (userId == null) return;
+
+      final isComplete = await profileService.isProfileComplete(userId);
+
+      if (!isComplete) {
+        // إذا لم يكمل البروفايل، توجيه لشاشة الإكمال
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
+        });
+      }
+    } catch (e) {
+      print('خطأ في التحقق من اكتمال البروفايل: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () async {
-            await driverController.loadEarningsData();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                _buildHeader(),
-                const SizedBox(height: 20),
-                _buildOnlineToggle(),
-                const SizedBox(height: 20),
-                _buildEarningsCards(),
-                const SizedBox(height: 20),
-                _buildQuickActions(),
-                const SizedBox(height: 20),
-                _buildTripRequests(),
-              ],
-            ),
-          ),
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.blue, Colors.blueAccent],
-        ),
-      ),
-      child: Row(
-        children: [
-          Obx(() => CircleAvatar(
-                radius: 30,
-                backgroundImage:
-                    authController.currentUser.value?.profileImage != null
-                        ? NetworkImage(
-                            authController.currentUser.value!.profileImage!)
-                        : null,
-                child: authController.currentUser.value?.profileImage == null
-                    ? const Icon(Icons.person, size: 30, color: Colors.white)
-                    : null,
-              )),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Obx(() => Text(
-                      'مرحباً، ${authController.currentUser.value?.name ?? 'السائق'}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )),
-                const SizedBox(height: 5),
-                Obx(() => Text(
-                      driverController.isOnline.value
-                          ? 'متصل ونشط'
-                          : 'غير متصل',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 14,
-                      ),
-                    )),
-              ],
-            ),
-          ),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => Get.toNamed(AppRoutes.DRIVER_SETTINGS),
-                icon: const Icon(Icons.settings, color: Colors.white),
-              ),
-              IconButton(
-                tooltip: 'تسجيل الخروج',
-                onPressed: () => authController.signOut(),
-                icon: const Icon(Icons.logout, color: Colors.white),
-              ),
-            ],
+      appBar: AppBar(
+        title: const Text('الصفحة الرئيسية'),
+        backgroundColor: Colors.blue,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () {
+              // TODO: فتح الإشعارات
+            },
           ),
         ],
       ),
+      drawer: _buildDrawer(),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildWelcomeSection(),
+            const SizedBox(height: 20),
+            _buildStatusSection(),
+            const SizedBox(height: 20),
+            _buildQuickActions(),
+            const SizedBox(height: 20),
+            _buildRecentTrips(),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildOnlineToggle() {
+  Widget _buildWelcomeSection() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        gradient: LinearGradient(
+          colors: [Colors.blue.shade400, Colors.blue.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Obx(() => Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: driverController.isOnline.value
-                      ? Colors.green.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
-                ),
-                child: Icon(
-                  driverController.isOnline.value
-                      ? Icons.online_prediction
-                      : Icons.offline_bolt,
-                  color: driverController.isOnline.value
-                      ? Colors.green
-                      : Colors.grey,
-                  size: 30,
-                ),
-              )),
-          const SizedBox(width: 15),
+          CircleAvatar(
+            radius: 30,
+            backgroundImage: authController.currentUser.value?.profileImage !=
+                    null
+                ? NetworkImage(authController.currentUser.value!.profileImage!)
+                : null,
+            child: authController.currentUser.value?.profileImage == null
+                ? const Icon(Icons.person, size: 30, color: Colors.white)
+                : null,
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Obx(() => Text(
-                      driverController.isOnline.value
-                          ? 'أنت متصل'
-                          : 'أنت غير متصل',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )),
-                const SizedBox(height: 5),
                 Text(
-                  driverController.isOnline.value
-                      ? 'يمكنك استقبال طلبات الرحلات'
-                      : 'اضغط للاتصال واستقبال الطلبات',
+                  'مرحباً ${authController.currentUser.value?.name ?? 'السائق'}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'جاهز لاستقبال الطلبات',
                   style: TextStyle(
-                    color: Colors.grey[600],
+                    color: Colors.white.withOpacity(0.9),
                     fontSize: 14,
                   ),
                 ),
               ],
             ),
           ),
-          Obx(() => Switch(
-                value: driverController.isOnline.value,
-                onChanged: (_) => driverController.toggleOnlineStatus(),
-                activeColor: Colors.green,
-              )),
         ],
       ),
     );
   }
 
-  Widget _buildEarningsCards() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+  Widget _buildStatusSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'الأرباح',
+            'حالة العمل',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: _buildEarningCard(
-                  'اليوم',
-                  driverController.todayEarnings,
-                  Icons.today,
-                  Colors.green,
+                child: _buildStatusCard(
+                  title: 'متصل',
+                  value: 'نعم',
+                  icon: Icons.wifi,
+                  color: Colors.green,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: _buildEarningCard(
-                  'الأسبوع',
-                  driverController.weekEarnings,
-                  Icons.date_range,
-                  Colors.blue,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildEarningCard(
-                  'الشهر',
-                  driverController.monthEarnings,
-                  Icons.calendar_month,
-                  Colors.purple,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(Icons.drive_eta, color: Colors.orange, size: 30),
-                      const SizedBox(height: 10),
-                      Obx(() => Text(
-                            '${driverController.completedTripsToday.value}',
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.orange,
-                            ),
-                          )),
-                      const Text(
-                        'رحلات اليوم',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _buildStatusCard(
+                  title: 'متاح',
+                  value: 'نعم',
+                  icon: Icons.check_circle,
+                  color: Colors.blue,
                 ),
               ),
             ],
@@ -272,38 +181,37 @@ class DriverHomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildEarningCard(
-      String title, RxDouble amount, IconData icon, Color color) {
+  Widget _buildStatusCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(height: 10),
-          Obx(() => Text(
-                '${amount.value.toStringAsFixed(1)} ج.م',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              )),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],
@@ -312,59 +220,62 @@ class DriverHomeView extends StatelessWidget {
   }
 
   Widget _buildQuickActions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'إجراءات سريعة',
             style: TextStyle(
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 15),
-          Row(
+          const SizedBox(height: 16),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
             children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  'المحفظة',
-                  Icons.account_balance_wallet,
-                  Colors.green,
-                  () => Get.toNamed(AppRoutes.DRIVER_WALLET),
-                ),
+              _buildActionCard(
+                title: 'الملف الشخصي',
+                icon: Icons.person,
+                color: Colors.blue,
+                onTap: () => Get.toNamed(AppRoutes.DRIVER_PROFILE),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildQuickActionCard(
-                  'تاريخ الرحلات',
-                  Icons.history,
-                  Colors.blue,
-                  () => Get.toNamed(AppRoutes.DRIVER_TRIP_HISTORY),
-                ),
+              _buildActionCard(
+                title: 'المحفظة',
+                icon: Icons.account_balance_wallet,
+                color: Colors.green,
+                onTap: () => Get.toNamed(AppRoutes.DRIVER_WALLET),
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _buildQuickActionCard(
-                  'الأرباح',
-                  Icons.trending_up,
-                  Colors.purple,
-                  () => Get.toNamed(AppRoutes.DRIVER_EARNINGS),
-                ),
+              _buildActionCard(
+                title: 'تاريخ الرحلات',
+                icon: Icons.history,
+                color: Colors.orange,
+                onTap: () => Get.toNamed(AppRoutes.DRIVER_TRIP_HISTORY),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildQuickActionCard(
-                  'الملف الشخصي',
-                  Icons.person,
-                  Colors.orange,
-                  () => Get.toNamed(AppRoutes.DRIVER_PROFILE),
-                ),
+              _buildActionCard(
+                title: 'الإعدادات',
+                icon: Icons.settings,
+                color: Colors.purple,
+                onTap: () {
+                  // TODO: فتح الإعدادات
+                },
               ),
             ],
           ),
@@ -373,41 +284,34 @@ class DriverHomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickActionCard(
-      String title, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildActionCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 5),
-            ),
-          ],
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withOpacity(0.1),
-              ),
-              child: Icon(icon, color: color, size: 25),
-            ),
-            const SizedBox(height: 10),
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w600,
+                color: color,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -415,379 +319,186 @@ class DriverHomeView extends StatelessWidget {
     );
   }
 
-  Widget _buildTripRequests() {
-    return Obx(() {
-      if (!driverController.isOnline.value) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
+  Widget _buildRecentTrips() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: Column(
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.offline_bolt, size: 60, color: Colors.grey[400]),
-              const SizedBox(height: 15),
-              Text(
-                'أنت غير متصل',
+              const Text(
+                'الرحلات الأخيرة',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.grey[600],
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                'اتصل لبدء استقبال طلبات الرحلات',
+              TextButton(
+                onPressed: () => Get.toNamed(AppRoutes.DRIVER_TRIP_HISTORY),
+                child: const Text('عرض الكل'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // TODO: عرض الرحلات الأخيرة
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey[50],
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Center(
+              child: Text(
+                'لا توجد رحلات حديثة',
                 style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 14,
+                  color: Colors.grey,
+                  fontSize: 16,
                 ),
-                textAlign: TextAlign.center,
               ),
-            ],
+            ),
           ),
-        );
-      }
+        ],
+      ),
+    );
+  }
 
-      if (driverController.isOnTrip.value) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
+  Widget _buildDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.blue.shade400, Colors.blue.shade600],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.blue.withOpacity(0.1),
-                    ),
-                    child: const Icon(Icons.directions_car,
-                        color: Colors.blue, size: 25),
-                  ),
-                  const SizedBox(width: 15),
-                  const Expanded(
-                    child: Text(
-                      'لديك رحلة نشطة',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 15),
-              ElevatedButton(
-                onPressed: () => Get.toNamed(AppRoutes.DRIVER_TRIP_TRACKING),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  minimumSize: const Size(double.infinity, 45),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text(
-                  'متابعة الرحلة',
-                  style: TextStyle(color: Colors.white, fontSize: 16),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-
-      if (driverController.tripRequests.isEmpty) {
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20),
-          padding: const EdgeInsets.all(30),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Icon(Icons.search, size: 60, color: Colors.grey[400]),
-              const SizedBox(height: 15),
-              Text(
-                'جاري البحث عن طلبات...',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[600],
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'ستظهر طلبات الرحلات هنا عند توفرها',
-                style: TextStyle(
-                  color: Colors.grey[500],
-                  fontSize: 14,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        );
-      }
-
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'طلبات الرحلات',
-                  style: TextStyle(
-                    fontSize: 20,
+                CircleAvatar(
+                  radius: 30,
+                  backgroundImage:
+                      authController.currentUser.value?.profileImage != null
+                          ? NetworkImage(
+                              authController.currentUser.value!.profileImage!)
+                          : null,
+                  child: authController.currentUser.value?.profileImage == null
+                      ? const Icon(Icons.person, size: 30, color: Colors.white)
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  authController.currentUser.value?.name ?? 'السائق',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${driverController.tripRequests.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                Text(
+                  authController.currentUser.value?.email ?? '',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 14,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 15),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: driverController.tripRequests.length,
-              itemBuilder: (context, index) {
-                final trip = driverController.tripRequests[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 15),
-                  padding: const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(color: Colors.orange, width: 2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.orange.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.orange.withOpacity(0.1),
-                            ),
-                            child: const Icon(Icons.person,
-                                color: Colors.orange, size: 20),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'طلب رحلة جديد',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  '${trip.distance.toStringAsFixed(1)} كم • ${trip.fare.toStringAsFixed(2)} ج.م',
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 15),
-                      Row(
-                        children: [
-                          const Icon(Icons.my_location,
-                              color: Colors.green, size: 16),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              trip.pickupLocation.address,
-                              style: const TextStyle(fontSize: 14),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on,
-                              color: Colors.red, size: 16),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              trip.destinationLocation.address,
-                              style: const TextStyle(fontSize: 14),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 15),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: () =>
-                                  driverController.declineTrip(trip),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.red),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text(
-                                'رفض',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton(
-                              onPressed: () =>
-                                  driverController.acceptTrip(trip),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text(
-                                'قبول الرحلة',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      );
-    });
-  }
-
-  Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('الملف الشخصي'),
+            onTap: () {
+              Get.back();
+              Get.toNamed(AppRoutes.DRIVER_PROFILE);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.account_balance_wallet),
+            title: const Text('المحفظة'),
+            onTap: () {
+              Get.back();
+              Get.toNamed(AppRoutes.DRIVER_WALLET);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.history),
+            title: const Text('تاريخ الرحلات'),
+            onTap: () {
+              Get.back();
+              Get.toNamed(AppRoutes.DRIVER_TRIP_HISTORY);
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('الإعدادات'),
+            onTap: () {
+              Get.back();
+              // TODO: فتح الإعدادات
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.help),
+            title: const Text('المساعدة'),
+            onTap: () {
+              Get.back();
+              // TODO: فتح المساعدة
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title:
+                const Text('تسجيل الخروج', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              Get.back();
+              _showLogoutDialog();
+            },
           ),
         ],
       ),
-      child: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'الرئيسية',
+    );
+  }
+
+  void _showLogoutDialog() {
+    Get.dialog(
+      AlertDialog(
+        title: const Text('تسجيل الخروج'),
+        content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('إلغاء'),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'الرحلات',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.account_balance_wallet),
-            label: 'المحفظة',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'الملف الشخصي',
+          ElevatedButton(
+            onPressed: () {
+              Get.back();
+              authController.signOut();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('تسجيل الخروج'),
           ),
         ],
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              // Already on home
-              break;
-            case 1:
-              Get.toNamed(AppRoutes.DRIVER_TRIP_HISTORY);
-              break;
-            case 2:
-              Get.toNamed(AppRoutes.DRIVER_WALLET);
-              break;
-            case 3:
-              Get.toNamed(AppRoutes.DRIVER_PROFILE);
-              break;
-          }
-        },
       ),
     );
   }

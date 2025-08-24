@@ -294,6 +294,8 @@ class NotificationService extends GetxService {
     required String title,
     required String message,
     required TripNotificationType tripType,
+    String? recipientId,
+    Map<String, dynamic>? additionalData,
   }) async {
     try {
       final notification = AppNotification(
@@ -304,10 +306,12 @@ class NotificationService extends GetxService {
           'type': 'trip_update',
           'trip_id': tripId,
           'trip_type': tripType.toString(),
+          ...?additionalData,
         },
         timestamp: DateTime.now(),
         isRead: false,
         type: NotificationType.tripUpdate,
+        recipientId: recipientId,
       );
 
       _addNotification(notification);
@@ -318,8 +322,466 @@ class NotificationService extends GetxService {
         body: message,
         data: notification.data,
       );
+
+      // إرسال إشعار Firebase إذا كان هناك recipientId
+      if (recipientId != null) {
+        await _sendFirebaseNotification(
+          recipientId: recipientId,
+          title: title,
+          message: message,
+          data: notification.data,
+        );
+      }
     } catch (e) {
       logger.e('خطأ في إشعار الرحلة: $e');
+    }
+  }
+
+  /// إرسال إشعار Firebase
+  Future<void> _sendFirebaseNotification({
+    required String recipientId,
+    required String title,
+    required String message,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      // TODO: إرسال إشعار Firebase عبر Cloud Functions
+      // هذا يتطلب إعداد Cloud Functions في Firebase
+      logger.i('إرسال إشعار Firebase إلى: $recipientId');
+      logger.i('العنوان: $title');
+      logger.i('الرسالة: $message');
+      logger.i('البيانات: $data');
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار Firebase: $e');
+    }
+  }
+
+  /// إشعار طلب رحلة جديد للسائقين
+  Future<void> sendNewTripRequestToDrivers({
+    required String tripId,
+    required String pickupAddress,
+    required String destinationAddress,
+    required double estimatedFare,
+    required List<String> nearbyDriverIds,
+  }) async {
+    try {
+      final title = '🚕 طلب جديد في منطقتك';
+      final message =
+          'راكب يطلب رحلة من $pickupAddress إلى $destinationAddress. التكلفة المتوقعة: ${estimatedFare.toStringAsFixed(2)} ج.م';
+
+      for (String driverId in nearbyDriverIds) {
+        await sendTripNotification(
+          tripId: tripId,
+          title: title,
+          message: message,
+          tripType: TripNotificationType.requested,
+          recipientId: driverId,
+          additionalData: {
+            'action': 'show_trip_request',
+            'pickup_address': pickupAddress,
+            'destination_address': destinationAddress,
+            'estimated_fare': estimatedFare,
+          },
+        );
+      }
+    } catch (e) {
+      logger.e('خطأ في إرسال طلب رحلة للسائقين: $e');
+    }
+  }
+
+  /// إشعار قبول الرحلة للراكب
+  Future<void> sendTripAcceptedToRider({
+    required String tripId,
+    required String riderId,
+    required String driverName,
+    required String driverPhone,
+    required String estimatedArrivalTime,
+  }) async {
+    try {
+      final title = 'تم العثور على سائق';
+      final message =
+          '$driverName في الطريق إليك. سيصل خلال $estimatedArrivalTime';
+
+      await sendTripNotification(
+        tripId: tripId,
+        title: title,
+        message: message,
+        tripType: TripNotificationType.accepted,
+        recipientId: riderId,
+        additionalData: {
+          'action': 'show_trip_tracking',
+          'driver_name': driverName,
+          'driver_phone': driverPhone,
+          'estimated_arrival': estimatedArrivalTime,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار قبول الرحلة: $e');
+    }
+  }
+
+  /// إشعار رفض الرحلة لباقي السائقين
+  Future<void> sendTripDeclinedToOtherDrivers({
+    required String tripId,
+    required List<String> otherDriverIds,
+  }) async {
+    try {
+      final title = 'تم قبول الرحلة';
+      final message = 'هذا الطلب لم يعد متاحًا';
+
+      for (String driverId in otherDriverIds) {
+        await sendTripNotification(
+          tripId: tripId,
+          title: title,
+          message: message,
+          tripType: TripNotificationType.declined,
+          recipientId: driverId,
+          additionalData: {
+            'action': 'dismiss',
+          },
+        );
+      }
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار رفض الرحلة: $e');
+    }
+  }
+
+  /// إشعار وصول السائق للراكب
+  Future<void> sendDriverArrivedToRider({
+    required String tripId,
+    required String riderId,
+    required String driverName,
+  }) async {
+    try {
+      final title = 'السائق وصل';
+      final message = 'سائقك $driverName ينتظرك الآن';
+
+      await sendTripNotification(
+        tripId: tripId,
+        title: title,
+        message: message,
+        tripType: TripNotificationType.driverArrived,
+        recipientId: riderId,
+        additionalData: {
+          'action': 'show_trip_details',
+          'driver_name': driverName,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار وصول السائق: $e');
+    }
+  }
+
+  /// إشعار بدء الرحلة للراكب
+  Future<void> sendTripStartedToRider({
+    required String tripId,
+    required String riderId,
+    required String destinationAddress,
+  }) async {
+    try {
+      final title = 'بدأت رحلتك';
+      final message = 'أنت في الطريق إلى $destinationAddress';
+
+      await sendTripNotification(
+        tripId: tripId,
+        title: title,
+        message: message,
+        tripType: TripNotificationType.started,
+        recipientId: riderId,
+        additionalData: {
+          'action': 'show_trip_tracking',
+          'destination': destinationAddress,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار بدء الرحلة: $e');
+    }
+  }
+
+  /// إشعار انتهاء الرحلة للراكب
+  Future<void> sendTripCompletedToRider({
+    required String tripId,
+    required String riderId,
+    required double finalFare,
+  }) async {
+    try {
+      final title = 'تم إنهاء الرحلة';
+      final message =
+          'وصلت إلى وجهتك. التكلفة: ${finalFare.toStringAsFixed(2)} ج.م';
+
+      await sendTripNotification(
+        tripId: tripId,
+        title: title,
+        message: message,
+        tripType: TripNotificationType.completed,
+        recipientId: riderId,
+        additionalData: {
+          'action': 'show_payment_screen',
+          'final_fare': finalFare,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار انتهاء الرحلة: $e');
+    }
+  }
+
+  /// إشعار أرباح للسائق
+  Future<void> sendEarningsToDriver({
+    required String tripId,
+    required String driverId,
+    required double earnings,
+  }) async {
+    try {
+      final title = 'رحلة مكتملة';
+      final message =
+          'لقد أنهيت الرحلة. أرباحك: ${earnings.toStringAsFixed(2)} ج.م';
+
+      await sendTripNotification(
+        tripId: tripId,
+        title: title,
+        message: message,
+        tripType: TripNotificationType.completed,
+        recipientId: driverId,
+        additionalData: {
+          'action': 'show_earnings',
+          'earnings': earnings,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال إشعار الأرباح: $e');
+    }
+  }
+
+  /// إرسال إشعار إداري مع وقت حذف تلقائي
+  Future<void> sendAdminMessageWithAutoDelete({
+    required String title,
+    required String message,
+    String? imageUrl,
+    Map<String, dynamic>? data,
+    Duration autoDeleteAfter = const Duration(hours: 24),
+    List<String>? targetUserIds, // إذا كان null، سيتم إرساله لجميع المستخدمين
+  }) async {
+    try {
+      final notification = AppNotification(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        title: title,
+        body: message,
+        imageUrl: imageUrl,
+        data: {
+          'type': 'admin_message',
+          'auto_delete_after': autoDeleteAfter.inSeconds,
+          ...?data,
+        },
+        timestamp: DateTime.now(),
+        isRead: false,
+        type: NotificationType.adminMessage,
+        autoDelete: true,
+        autoDeleteAfter: autoDeleteAfter,
+        targetUserIds: targetUserIds,
+      );
+
+      _addNotification(notification);
+
+      // عرض إشعار محلي
+      await _showLocalNotification(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: title,
+        body: message,
+        data: notification.data,
+      );
+
+      // إرسال إشعار Firebase للمستخدمين المستهدفين
+      if (targetUserIds != null) {
+        for (String userId in targetUserIds) {
+          await _sendFirebaseNotification(
+            recipientId: userId,
+            title: title,
+            message: message,
+            data: notification.data,
+          );
+        }
+      } else {
+        // إرسال لجميع المستخدمين (يتطلب Cloud Functions)
+        logger.i('إرسال إشعار إداري لجميع المستخدمين');
+      }
+
+      // جدولة الحذف التلقائي
+      Timer(autoDeleteAfter, () {
+        deleteNotification(notification.id);
+      });
+    } catch (e) {
+      logger.e('خطأ في إرسال رسالة الإدارة: $e');
+    }
+  }
+
+  /// إرسال إشعار إداري ثابت (للاختبار)
+  Future<void> sendStaticAdminNotification({
+    required AdminNotificationType type,
+    List<String>? targetUserIds,
+  }) async {
+    try {
+      final notificationData = _getStaticAdminNotificationData(type);
+
+      await sendAdminMessageWithAutoDelete(
+        title: notificationData['title'],
+        message: notificationData['message'],
+        autoDeleteAfter: notificationData['autoDeleteAfter'],
+        targetUserIds: targetUserIds,
+        data: {
+          'notification_type': type.toString(),
+          'static_data': true,
+        },
+      );
+    } catch (e) {
+      logger.e('خطأ في إرسال الإشعار الإداري الثابت: $e');
+    }
+  }
+
+  /// الحصول على بيانات الإشعارات الإدارية الثابتة
+  Map<String, dynamic> _getStaticAdminNotificationData(
+      AdminNotificationType type) {
+    switch (type) {
+      case AdminNotificationType.welcome:
+        return {
+          'title': '🎉 مرحباً بك في تطبيق النقل',
+          'message': 'نشكرك على استخدام تطبيقنا. نتمنى لك رحلات آمنة ومريحة!',
+          'autoDeleteAfter': const Duration(hours: 48),
+        };
+
+      case AdminNotificationType.maintenance:
+        return {
+          'title': '🔧 صيانة مجدولة',
+          'message':
+              'سيتم إجراء صيانة على النظام غداً من الساعة 2:00 صباحاً حتى 4:00 صباحاً. نعتذر عن أي إزعاج.',
+          'autoDeleteAfter': const Duration(hours: 72),
+        };
+
+      case AdminNotificationType.update:
+        return {
+          'title': '📱 تحديث جديد متاح',
+          'message':
+              'تم إطلاق إصدار جديد من التطبيق مع ميزات محسنة. يرجى تحديث التطبيق للحصول على أفضل تجربة.',
+          'autoDeleteAfter': const Duration(hours: 168), // أسبوع
+        };
+
+      case AdminNotificationType.promotion:
+        return {
+          'title': '🎁 عرض خاص',
+          'message':
+              'احصل على خصم 20% على رحلتك الأولى! استخدم الكود: WELCOME20',
+          'autoDeleteAfter': const Duration(hours: 24),
+        };
+
+      case AdminNotificationType.emergency:
+        return {
+          'title': '⚠️ تنبيه مهم',
+          'message':
+              'يرجى توخي الحذر أثناء القيادة في الظروف الجوية الحالية. سلامتك أولاً.',
+          'autoDeleteAfter': const Duration(hours: 12),
+        };
+
+      case AdminNotificationType.news:
+        return {
+          'title': '📰 أخبار التطبيق',
+          'message':
+              'تم إضافة ميزات جديدة: تتبع الرحلات في الوقت الفعلي، دفع إلكتروني محسن، وتقييمات أفضل.',
+          'autoDeleteAfter': const Duration(hours: 96),
+        };
+
+      case AdminNotificationType.reminder:
+        return {
+          'title': '💡 تذكير مهم',
+          'message': 'لا تنس تقييم رحلتك الأخيرة لمساعدتنا في تحسين الخدمة.',
+          'autoDeleteAfter': const Duration(hours: 24),
+        };
+
+      case AdminNotificationType.holiday:
+        return {
+          'title': '🎉 عيد سعيد',
+          'message': 'نتمنى لكم عيداً سعيداً! سنواصل خدمتكم على مدار الساعة.',
+          'autoDeleteAfter': const Duration(hours: 48),
+        };
+    }
+  }
+
+  /// الحصول على قائمة أنواع الإشعارات الإدارية
+  List<Map<String, dynamic>> getAdminNotificationTypes() {
+    return AdminNotificationType.values.map((type) {
+      final data = _getStaticAdminNotificationData(type);
+      return {
+        'type': type,
+        'title': data['title'],
+        'message': data['message'],
+        'description': _getAdminNotificationDescription(type),
+        'icon': _getAdminNotificationIcon(type),
+        'color': _getAdminNotificationColor(type),
+      };
+    }).toList();
+  }
+
+  /// الحصول على وصف نوع الإشعار الإداري
+  String _getAdminNotificationDescription(AdminNotificationType type) {
+    switch (type) {
+      case AdminNotificationType.welcome:
+        return 'رسالة ترحيب للمستخدمين الجدد';
+      case AdminNotificationType.maintenance:
+        return 'تنبيه بالصيانة المجدولة';
+      case AdminNotificationType.update:
+        return 'إشعار بتحديث التطبيق';
+      case AdminNotificationType.promotion:
+        return 'عروض وخصومات خاصة';
+      case AdminNotificationType.emergency:
+        return 'تنبيهات طارئة ومهمة';
+      case AdminNotificationType.news:
+        return 'أخبار وميزات جديدة';
+      case AdminNotificationType.reminder:
+        return 'تذكيرات للمستخدمين';
+      case AdminNotificationType.holiday:
+        return 'تهاني بمناسبات خاصة';
+    }
+  }
+
+  /// الحصول على أيقونة نوع الإشعار الإداري
+  String _getAdminNotificationIcon(AdminNotificationType type) {
+    switch (type) {
+      case AdminNotificationType.welcome:
+        return '🎉';
+      case AdminNotificationType.maintenance:
+        return '🔧';
+      case AdminNotificationType.update:
+        return '📱';
+      case AdminNotificationType.promotion:
+        return '🎁';
+      case AdminNotificationType.emergency:
+        return '⚠️';
+      case AdminNotificationType.news:
+        return '📰';
+      case AdminNotificationType.reminder:
+        return '💡';
+      case AdminNotificationType.holiday:
+        return '🎉';
+    }
+  }
+
+  /// الحصول على لون نوع الإشعار الإداري
+  String _getAdminNotificationColor(AdminNotificationType type) {
+    switch (type) {
+      case AdminNotificationType.welcome:
+        return '#4CAF50'; // أخضر
+      case AdminNotificationType.maintenance:
+        return '#FF9800'; // برتقالي
+      case AdminNotificationType.update:
+        return '#2196F3'; // أزرق
+      case AdminNotificationType.promotion:
+        return '#E91E63'; // وردي
+      case AdminNotificationType.emergency:
+        return '#F44336'; // أحمر
+      case AdminNotificationType.news:
+        return '#9C27B0'; // بنفسجي
+      case AdminNotificationType.reminder:
+        return '#FFC107'; // أصفر
+      case AdminNotificationType.holiday:
+        return '#4CAF50'; // أخضر
     }
   }
 
@@ -460,6 +922,9 @@ class AppNotification {
   final bool isRead;
   final NotificationType type;
   final bool autoDelete;
+  final Duration? autoDeleteAfter;
+  final List<String>? targetUserIds;
+  final String? recipientId;
 
   AppNotification({
     required this.id,
@@ -471,6 +936,9 @@ class AppNotification {
     required this.isRead,
     required this.type,
     this.autoDelete = false,
+    this.autoDeleteAfter,
+    this.targetUserIds,
+    this.recipientId,
   });
 
   factory AppNotification.fromFirebaseMessage(RemoteMessage message) {
@@ -485,6 +953,10 @@ class AppNotification {
       isRead: false,
       type: _getNotificationTypeFromData(message.data),
       autoDelete: message.data['auto_delete'] == 'true',
+      autoDeleteAfter: message.data['auto_delete_after'] != null
+          ? Duration(seconds: int.parse(message.data['auto_delete_after']!))
+          : null,
+      recipientId: message.data['recipient_id'],
     );
   }
 
@@ -512,6 +984,9 @@ class AppNotification {
     bool? isRead,
     NotificationType? type,
     bool? autoDelete,
+    Duration? autoDeleteAfter,
+    List<String>? targetUserIds,
+    String? recipientId,
   }) {
     return AppNotification(
       id: id ?? this.id,
@@ -523,6 +998,9 @@ class AppNotification {
       isRead: isRead ?? this.isRead,
       type: type ?? this.type,
       autoDelete: autoDelete ?? this.autoDelete,
+      autoDeleteAfter: autoDeleteAfter ?? this.autoDeleteAfter,
+      targetUserIds: targetUserIds ?? this.targetUserIds,
+      recipientId: recipientId ?? this.recipientId,
     );
   }
 
@@ -537,6 +1015,9 @@ class AppNotification {
       'isRead': isRead,
       'type': type.toString(),
       'autoDelete': autoDelete,
+      'autoDeleteAfter': autoDeleteAfter?.inSeconds,
+      'targetUserIds': targetUserIds,
+      'recipientId': recipientId,
     };
   }
 
@@ -554,6 +1035,11 @@ class AppNotification {
         orElse: () => NotificationType.general,
       ),
       autoDelete: json['autoDelete'] ?? false,
+      autoDeleteAfter: json['autoDeleteAfter'] != null
+          ? Duration(seconds: json['autoDeleteAfter'])
+          : null,
+      targetUserIds: List<String>.from(json['targetUserIds'] ?? []),
+      recipientId: json['recipientId'],
     );
   }
 }
@@ -574,4 +1060,17 @@ enum TripNotificationType {
   started,
   completed,
   cancelled,
+  declined,
+}
+
+/// أنواع الإشعارات الإدارية
+enum AdminNotificationType {
+  welcome,
+  maintenance,
+  update,
+  promotion,
+  emergency,
+  news,
+  reminder,
+  holiday,
 }

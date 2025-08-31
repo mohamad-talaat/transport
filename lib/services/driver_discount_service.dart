@@ -9,10 +9,10 @@ import '../main.dart';
 
 class DriverDiscountService extends GetxService {
   static DriverDiscountService get to => Get.find();
-  
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthController _authController = Get.find<AuthController>();
-  
+
   final RxBool isLoading = false.obs;
   final RxList<DiscountCodeModel> usedDiscountCodes = <DiscountCodeModel>[].obs;
 
@@ -54,7 +54,8 @@ class DriverDiscountService extends GetxService {
 
       final discountDoc = discountQuery.docs.first;
       final discountData = discountDoc.data();
-      final discountCode = DiscountCodeModel.fromMap(discountData, discountDoc.id);
+      final discountCode =
+          DiscountCodeModel.fromMap(discountData, discountDoc.id);
 
       // التحقق من صلاحية الكود
       if (!discountCode.isValid) {
@@ -65,8 +66,8 @@ class DriverDiscountService extends GetxService {
       }
 
       // التحقق من تاريخ انتهاء الصلاحية
-      if (discountCode.expiresAt != null && 
-          DateTime.now().isAfter(discountCode.expiresAt!)) {
+      if (discountCode.expiryDate != null &&
+          DateTime.now().isAfter(discountCode.expiryDate!)) {
         return {
           'success': false,
           'message': 'كود الخصم منتهي الصلاحية',
@@ -85,13 +86,14 @@ class DriverDiscountService extends GetxService {
         // تحديث رصيد السائق
         final userRef = _firestore.collection('users').doc(userId);
         final userSnapshot = await transaction.get(userRef);
-        
+
         if (!userSnapshot.exists) {
           throw 'المستخدم غير موجود';
         }
 
-        final currentBalance = (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
-        final discountAmount = discountCode.amount;
+        final currentBalance =
+            (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
+        final discountAmount = discountCode.discountAmount;
         final newBalance = currentBalance + discountAmount;
 
         transaction.update(userRef, {
@@ -111,16 +113,16 @@ class DriverDiscountService extends GetxService {
           'metadata': {
             'discountCode': discountCode.code,
             'discountId': discountDoc.id,
-            'discountType': discountCode.type,
-            'discountPercentage': discountCode.percentage,
+            'discountAmount': discountCode.discountAmount,
           },
         });
       });
 
       // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
-        _authController.currentUser.value!.balance = 
-            (_authController.currentUser.value!.balance ?? 0.0) + discountCode.amount;
+        _authController.currentUser.value!.balance =
+            (_authController.currentUser.value!.balance ?? 0.0) +
+                discountCode.discountAmount;
         _authController.currentUser.refresh();
       }
 
@@ -132,11 +134,11 @@ class DriverDiscountService extends GetxService {
 
       return {
         'success': true,
-        'message': 'تم إضافة ${discountCode.amount.toStringAsFixed(2)} ج.م إلى رصيدك',
-        'amount': discountCode.amount,
+        'message':
+            'تم إضافة ${discountCode.discountAmount.toStringAsFixed(2)} ج.م إلى رصيدك',
+        'amount': discountCode.discountAmount,
         'code': discountCode.code,
       };
-
     } catch (e) {
       logger.e('خطأ في استخدام كود الخصم: $e');
       return {

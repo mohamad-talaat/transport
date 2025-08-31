@@ -4,7 +4,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path/path.dart' as path;
+import 'package:path/path.dart' as path_util;
 import '../main.dart';
 
 class ImageUploadService extends GetxService {
@@ -81,7 +81,7 @@ class ImageUploadService extends GetxService {
       uploadProgress.value = 0.0;
 
       // إنشاء مسار الملف في Storage
-      final String fileExtension = path.extension(imageFile.path);
+      final String fileExtension = path_util.extension(imageFile.path);
       final String fullFileName = '$fileName$fileExtension';
       final Reference storageRef =
           _storage.ref().child('$folder/$fullFileName');

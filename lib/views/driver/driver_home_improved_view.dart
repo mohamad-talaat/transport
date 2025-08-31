@@ -363,7 +363,7 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
                           onChanged: (value) {
                             driverController.toggleOnlineStatus();
                           },
-                          activeColor: const Color(0xFF059669),
+                          activeThumbColor: const Color(0xFF059669),
                           activeTrackColor: const Color(0xFFD1FAE5),
                         ),
                       );

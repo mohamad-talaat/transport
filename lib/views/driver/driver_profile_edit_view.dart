@@ -35,10 +35,10 @@ class _DriverProfileEditViewState extends State<DriverProfileEditView> {
 
   // Loading states
   bool _isLoading = false;
-  bool _isUploadingProfileImage = false;
-  bool _isUploadingIdCard = false;
-  bool _isUploadingLicense = false;
-  bool _isUploadingVehicle = false;
+  final bool _isUploadingProfileImage = false;
+  final bool _isUploadingIdCard = false;
+  final bool _isUploadingLicense = false;
+  final bool _isUploadingVehicle = false;
 
   // Image files
   File? _profileImageFile;
@@ -442,7 +442,7 @@ class _DriverProfileEditViewState extends State<DriverProfileEditView> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedVehicleColor,
+              initialValue: _selectedVehicleColor,
               decoration: const InputDecoration(
                 labelText: 'لون السيارة *',
                 border: OutlineInputBorder(),
@@ -513,7 +513,7 @@ class _DriverProfileEditViewState extends State<DriverProfileEditView> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedServiceArea,
+              initialValue: _selectedServiceArea,
               decoration: const InputDecoration(
                 labelText: 'منطقة العمل *',
                 border: OutlineInputBorder(),

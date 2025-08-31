@@ -1,10 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/models/driver_profile_model.dart';
-import 'package:transport_app/services/driver_profile_service.dart';
 import 'package:transport_app/services/image_upload_service.dart';
 import 'package:transport_app/main.dart';
-import 'package:transport_app/models/user_model.dart';
 
 class DriverProfileService extends GetxService {
   static DriverProfileService get to => Get.find();
@@ -378,7 +376,7 @@ class DriverProfileService extends GetxService {
       await _firestore.collection('users').doc(userId).update(data);
     } catch (e) {
       print('خطأ في تحديث بيانات البروفايل: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -393,7 +391,7 @@ class DriverProfileService extends GetxService {
       });
     } catch (e) {
       print('خطأ في تحديث حالة اكتمال البروفايل: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -447,7 +445,7 @@ class DriverProfileService extends GetxService {
           .get();
 
       return querySnapshot.docs
-          .map((doc) => doc.data() as Map<String, dynamic>)
+          .map((doc) => doc.data())
           .toList();
     } catch (e) {
       print('خطأ في جلب السائقين في الانتظار: $e');
@@ -467,7 +465,7 @@ class DriverProfileService extends GetxService {
           .get();
 
       return querySnapshot.docs
-          .map((doc) => doc.data() as Map<String, dynamic>)
+          .map((doc) => doc.data())
           .toList();
     } catch (e) {
       print('خطأ في جلب السائقين الموافق عليهم: $e');
@@ -487,7 +485,7 @@ class DriverProfileService extends GetxService {
           .get();
 
       return querySnapshot.docs
-          .map((doc) => doc.data() as Map<String, dynamic>)
+          .map((doc) => doc.data())
           .toList();
     } catch (e) {
       print('خطأ في جلب السائقين المرفوضين: $e');

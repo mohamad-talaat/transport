@@ -470,7 +470,7 @@ class FirebaseService extends GetxService {
 
         final currentBalance =
             (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
-        final discountAmount = discountCode.amount;
+        final discountAmount = discountCode.discountAmount;
         final newBalance = currentBalance + discountAmount;
 
         transaction.update(userRef, {
@@ -482,7 +482,7 @@ class FirebaseService extends GetxService {
       return {
         'success': true,
         'message': 'تم تطبيق كود الخصم بنجاح',
-        'amount': discountCode.amount,
+        'amount': discountCode.discountAmount,
       };
     } catch (e) {
       logger.w('خطأ في استخدام كود الخصم: $e');

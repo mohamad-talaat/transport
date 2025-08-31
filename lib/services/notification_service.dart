@@ -41,9 +41,7 @@ class NotificationService extends GetxService {
       String? token = await _firebaseMessaging!.getToken();
       logger.e('FCM Token: $token');
       // إرسال التوكن للخادم
-      if (token != null) {
-        await _sendTokenToServer(token);
-      }
+      await _sendTokenToServer(token!);
 
       // مراقبة تحديث التوكن
       _firebaseMessaging!.onTokenRefresh.listen((newToken) {
@@ -365,7 +363,7 @@ class NotificationService extends GetxService {
     required List<String> nearbyDriverIds,
   }) async {
     try {
-      final title = '🚕 طلب جديد في منطقتك';
+      const title = '🚕 طلب جديد في منطقتك';
       final message =
           'راكب يطلب رحلة من $pickupAddress إلى $destinationAddress. التكلفة المتوقعة: ${estimatedFare.toStringAsFixed(2)} ج.م';
 
@@ -398,7 +396,7 @@ class NotificationService extends GetxService {
     required String estimatedArrivalTime,
   }) async {
     try {
-      final title = 'تم العثور على سائق';
+      const title = 'تم العثور على سائق';
       final message =
           '$driverName في الطريق إليك. سيصل خلال $estimatedArrivalTime';
 
@@ -426,8 +424,8 @@ class NotificationService extends GetxService {
     required List<String> otherDriverIds,
   }) async {
     try {
-      final title = 'تم قبول الرحلة';
-      final message = 'هذا الطلب لم يعد متاحًا';
+      const title = 'تم قبول الرحلة';
+      const message = 'هذا الطلب لم يعد متاحًا';
 
       for (String driverId in otherDriverIds) {
         await sendTripNotification(
@@ -453,7 +451,7 @@ class NotificationService extends GetxService {
     required String driverName,
   }) async {
     try {
-      final title = 'السائق وصل';
+      const title = 'السائق وصل';
       final message = 'سائقك $driverName ينتظرك الآن';
 
       await sendTripNotification(
@@ -479,7 +477,7 @@ class NotificationService extends GetxService {
     required String destinationAddress,
   }) async {
     try {
-      final title = 'بدأت رحلتك';
+      const title = 'بدأت رحلتك';
       final message = 'أنت في الطريق إلى $destinationAddress';
 
       await sendTripNotification(
@@ -505,7 +503,7 @@ class NotificationService extends GetxService {
     required double finalFare,
   }) async {
     try {
-      final title = 'تم إنهاء الرحلة';
+      const title = 'تم إنهاء الرحلة';
       final message =
           'وصلت إلى وجهتك. التكلفة: ${finalFare.toStringAsFixed(2)} ج.م';
 
@@ -532,7 +530,7 @@ class NotificationService extends GetxService {
     required double earnings,
   }) async {
     try {
-      final title = 'رحلة مكتملة';
+      const title = 'رحلة مكتملة';
       final message =
           'لقد أنهيت الرحلة. أرباحك: ${earnings.toStringAsFixed(2)} ج.م';
 

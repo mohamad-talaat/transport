@@ -1083,7 +1083,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
       await Future.delayed(const Duration(seconds: 2));
 
       // إضافة المبلغ إلى المحفظة
-      final discountAmount = 25.0; // مبلغ الخصم
+      const discountAmount = 25.0; // مبلغ الخصم
       await authController.updateBalance(discountAmount);
 
       // تسجيل المعاملة

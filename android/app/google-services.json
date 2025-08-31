@@ -1,26 +1,44 @@
 {
   "project_info": {
-    "project_number": "585762437257",
-    "project_id": "transporter-app-59aac",
-    "storage_bucket": "transporter-app-59aac.firebasestorage.app"
+    "project_number": "271515966958",
+    "project_id": "transporter-e25df",
+    "storage_bucket": "transporter-e25df.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:585762437257:android:021128a150e50a91e06e58",
+        "mobilesdk_app_id": "1:271515966958:android:343bb18d50bbf404fd02ff",
         "android_client_info": {
           "package_name": "transport.app.com"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "271515966958-10sh3bljovoudnss4d0p7fv83qe4bkkb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "transport.app.com",
+            "certificate_hash": "a188e159fdad3f86ef0946dbb7465a091ecb18b5"
+          }
+        },
+        {
+          "client_id": "271515966958-u3ihe7tfkfunpq747q1us1n3ja79dg4a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyACJO6YnU2bnE7Pj-XpNwW6gVC57rbZb7Q"
+          "current_key": "AIzaSyAKQ4CUqaml911GQS7GcrJgKhMrZmIfBLg"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "271515966958-u3ihe7tfkfunpq747q1us1n3ja79dg4a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

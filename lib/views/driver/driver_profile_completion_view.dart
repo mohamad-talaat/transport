@@ -1,12 +1,10 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:transport_app/controllers/auth_controller.dart';
-import 'package:transport_app/models/driver_profile_model.dart';
-import 'package:transport_app/services/driver_profile_service.dart';
-import 'package:transport_app/routes/app_routes.dart';
-import 'package:transport_app/services/image_upload_service.dart';
-import 'package:transport_app/routes/app_routes.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../models/driver_model.dart';
+import '../../services/user_management_service.dart';
+import '../../services/image_upload_service.dart';
 
 class DriverProfileCompletionView extends StatefulWidget {
   const DriverProfileCompletionView({super.key});
@@ -18,449 +16,583 @@ class DriverProfileCompletionView extends StatefulWidget {
 
 class _DriverProfileCompletionViewState
     extends State<DriverProfileCompletionView> {
-  final AuthController authController = Get.find<AuthController>();
-  final DriverProfileService profileService = Get.find<DriverProfileService>();
+  final UserManagementService _userService = Get.find<UserManagementService>();
+  final ImageUploadService _imageService = Get.find<ImageUploadService>();
 
-  final RxBool isLoading = false.obs;
-  final RxDouble completionPercentage = 0.0.obs;
-  final RxList<String> missingFields = <String>[].obs;
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _nationalIdController = TextEditingController();
+  final _drivingLicenseController = TextEditingController();
+  final _vehicleLicenseController = TextEditingController();
+  final _vehicleModelController = TextEditingController();
+  final _vehicleColorController = TextEditingController();
+  final _vehiclePlateController = TextEditingController();
+  final _emergencyContactController = TextEditingController();
+  final _emergencyContactNameController = TextEditingController();
+
+  VehicleType _selectedVehicleType = VehicleType.car;
+  bool _isLoading = false;
+  String? _profileImage;
+  String? _nationalIdImage;
+  String? _drivingLicenseImage;
+  String? _vehicleLicenseImage;
+  String? _vehicleImage;
+  String? _insuranceImage;
+  String? _backgroundCheckImage;
 
   @override
   void initState() {
     super.initState();
-    _loadProfileStatus();
+    _loadCurrentDriverData();
+  }
+
+  void _loadCurrentDriverData() {
+    final driver = _userService.currentDriver.value;
+    if (driver != null) {
+      _nameController.text = driver.name;
+      _phoneController.text = driver.phone;
+      _emailController.text = driver.email;
+      _nationalIdController.text = driver.nationalId ?? '';
+      _drivingLicenseController.text = driver.drivingLicense ?? '';
+      _vehicleLicenseController.text = driver.vehicleLicense ?? '';
+      _vehicleModelController.text = driver.vehicleModel ?? '';
+      _vehicleColorController.text = driver.vehicleColor ?? '';
+      _vehiclePlateController.text = driver.vehiclePlateNumber ?? '';
+      _emergencyContactController.text = driver.emergencyContact ?? '';
+      _emergencyContactNameController.text = driver.emergencyContactName ?? '';
+
+      _profileImage = driver.profileImage;
+      _nationalIdImage = driver.nationalIdImage;
+      _drivingLicenseImage = driver.drivingLicenseImage;
+      _vehicleLicenseImage = driver.vehicleLicenseImage;
+      _vehicleImage = driver.vehicleImage;
+      _insuranceImage = driver.insuranceImage;
+      _backgroundCheckImage = driver.backgroundCheckImage;
+
+      if (driver.vehicleType != null) {
+        _selectedVehicleType = driver.vehicleType!;
+      }
+    }
   }
 
   @override
   void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _nationalIdController.dispose();
+    _drivingLicenseController.dispose();
+    _vehicleLicenseController.dispose();
+    _vehicleModelController.dispose();
+    _vehicleColorController.dispose();
+    _vehiclePlateController.dispose();
+    _emergencyContactController.dispose();
+    _emergencyContactNameController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadProfileStatus() async {
+  Future<void> _pickImage(String imageType) async {
     try {
-      isLoading.value = true;
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
-      final userId = authController.currentUser.value?.id;
-      if (userId == null) return;
+      if (image != null) {
+        setState(() => _isLoading = true);
 
-      // حساب نسبة اكتمال البروفايل
-      final percentage =
-          await profileService.getProfileCompletionPercentage(userId);
-      completionPercentage.value = percentage;
+        final imageUrl = await _imageService.uploadImage(
+          imageFile: File(image.path),
+          folder: 'driver_documents',
+          fileName: '${imageType}_${DateTime.now().millisecondsSinceEpoch}',
+        );
 
-      // الحصول على الحقول الناقصة
-      final missing = await profileService.getMissingFields(userId);
-      missingFields.value = missing;
+        setState(() {
+          switch (imageType) {
+            case 'profile':
+              _profileImage = imageUrl;
+              break;
+            case 'nationalId':
+              _nationalIdImage = imageUrl;
+              break;
+            case 'drivingLicense':
+              _drivingLicenseImage = imageUrl;
+              break;
+            case 'vehicleLicense':
+              _vehicleLicenseImage = imageUrl;
+              break;
+            case 'vehicle':
+              _vehicleImage = imageUrl;
+              break;
+            case 'insurance':
+              _insuranceImage = imageUrl;
+              break;
+            case 'backgroundCheck':
+              _backgroundCheckImage = imageUrl;
+              break;
+          }
+        });
+      }
     } catch (e) {
-      print('خطأ في تحميل حالة البروفايل: $e');
+      Get.snackbar('خطأ', 'فشل في رفع الصورة: $e');
     } finally {
-      isLoading.value = false;
+      setState(() => _isLoading = false);
     }
   }
 
-  void _showLogoutDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('تسجيل الخروج'),
-        content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              authController.signOut();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final driver = _userService.currentDriver.value;
+    if (driver == null) {
+      Get.snackbar('خطأ', 'لم يتم العثور على بيانات السائق');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final data = {
+        'name': _nameController.text.trim(),
+        'phone': _phoneController.text.trim(),
+        'email': _emailController.text.trim(),
+        'nationalId': _nationalIdController.text.trim(),
+        'nationalIdImage': _nationalIdImage,
+        'drivingLicense': _drivingLicenseController.text.trim(),
+        'drivingLicenseImage': _drivingLicenseImage,
+        'vehicleLicense': _vehicleLicenseController.text.trim(),
+        'vehicleLicenseImage': _vehicleLicenseImage,
+        'vehicleType': _selectedVehicleType.name,
+        'vehicleModel': _vehicleModelController.text.trim(),
+        'vehicleColor': _vehicleColorController.text.trim(),
+        'vehiclePlateNumber': _vehiclePlateController.text.trim(),
+        'vehicleImage': _vehicleImage,
+        'insuranceImage': _insuranceImage,
+        'backgroundCheckImage': _backgroundCheckImage,
+        'emergencyContact': _emergencyContactController.text.trim(),
+        'emergencyContactName': _emergencyContactNameController.text.trim(),
+        'isProfileComplete': _isProfileComplete(),
+      };
+
+      final success = await _userService.updateDriver(driver.id, data);
+
+      if (success) {
+        Get.snackbar(
+          'نجح',
+          'تم حفظ البيانات بنجاح',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+
+        // التحقق من اكتمال الملف
+        final updatedDriver = _userService.currentDriver.value;
+        if (updatedDriver?.isProfileFullyComplete == true) {
+          Get.snackbar(
+            'ممتاز!',
+            'تم اكتمال ملفك الشخصي. سيتم مراجعته من قبل الإدارة قريباً.',
+            backgroundColor: Colors.blue,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 5),
+          );
+        }
+      } else {
+        Get.snackbar('خطأ', 'فشل في حفظ البيانات');
+      }
+    } catch (e) {
+      Get.snackbar('خطأ', 'حدث خطأ أثناء حفظ البيانات: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  bool _isProfileComplete() {
+    return _nameController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty &&
+        _emailController.text.isNotEmpty &&
+        _nationalIdController.text.isNotEmpty &&
+        _nationalIdImage != null &&
+        _drivingLicenseController.text.isNotEmpty &&
+        _drivingLicenseImage != null &&
+        _vehicleLicenseController.text.isNotEmpty &&
+        _vehicleLicenseImage != null &&
+        _vehicleModelController.text.isNotEmpty &&
+        _vehicleColorController.text.isNotEmpty &&
+        _vehiclePlateController.text.isNotEmpty &&
+        _vehicleImage != null &&
+        _insuranceImage != null &&
+        _backgroundCheckImage != null;
+  }
+
+  Widget _buildImagePicker(
+      String title, String imageType, String? currentImage) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            child: const Text('تسجيل الخروج'),
-          ),
-        ],
+            const SizedBox(height: 8),
+            if (currentImage != null)
+              Container(
+                height: 120,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  image: DecorationImage(
+                    image: NetworkImage(currentImage),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : () => _pickImage(imageType),
+              icon: const Icon(Icons.upload),
+              label: Text(currentImage != null ? 'تغيير الصورة' : 'رفع صورة'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('إكمال البروفايل'),
-        actions: [
-          Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: IconButton(
-        onPressed: _showLogoutDialog,
-        icon: Icon(Icons.logout, color: Colors.white, size: 24),
-        padding: const EdgeInsets.all(12),
-      ),
-    )
-        ],
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false, // منع الرجوع
+        title: const Text('إكمال الملف الشخصي'),
+        centerTitle: true,
       ),
       body: Obx(() {
-        if (isLoading.value) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
+        final driver = _userService.currentDriver.value;
+        if (driver == null) {
+          return const Center(child: CircularProgressIndicator());
         }
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 30),
-              _buildProgressSection(),
-              const SizedBox(height: 30),
-              _buildMissingFieldsSection(),
-              const SizedBox(height: 30),
-              _buildActionButtons(),
-            ],
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // حالة الملف الشخصي
+                Card(
+                  color: driver.isProfileFullyComplete
+                      ? Colors.green.shade50
+                      : Colors.orange.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          driver.isProfileFullyComplete
+                              ? Icons.check_circle
+                              : Icons.warning,
+                          color: driver.isProfileFullyComplete
+                              ? Colors.green
+                              : Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            driver.isProfileFullyComplete
+                                ? 'ملفك الشخصي مكتمل'
+                                : 'يرجى إكمال جميع البيانات المطلوبة',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: driver.isProfileFullyComplete
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // البيانات الأساسية
+                const Text(
+                  'البيانات الأساسية',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'الاسم الكامل',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'يرجى إدخال الاسم';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم الهاتف',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'يرجى إدخال رقم الهاتف';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'البريد الإلكتروني',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true)
+                      return 'يرجى إدخال البريد الإلكتروني';
+                    if (!GetUtils.isEmail(value!))
+                      return 'يرجى إدخال بريد إلكتروني صحيح';
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 24),
+
+                // المستندات الشخصية
+                const Text(
+                  'المستندات الشخصية',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _nationalIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم الهوية الوطنية',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'يرجى إدخال رقم الهوية';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                _buildImagePicker(
+                    'صورة الهوية الوطنية', 'nationalId', _nationalIdImage),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _drivingLicenseController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم رخصة القيادة',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true)
+                      return 'يرجى إدخال رقم رخصة القيادة';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                _buildImagePicker('صورة رخصة القيادة', 'drivingLicense',
+                    _drivingLicenseImage),
+
+                const SizedBox(height: 24),
+
+                // بيانات المركبة
+                const Text(
+                  'بيانات المركبة',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+
+                DropdownButtonFormField<VehicleType>(
+                  value: _selectedVehicleType,
+                  decoration: const InputDecoration(
+                    labelText: 'نوع المركبة',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: VehicleType.values.map((type) {
+                    return DropdownMenuItem(
+                      value: type,
+                      child: Text(_getVehicleTypeText(type)),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedVehicleType = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _vehicleModelController,
+                  decoration: const InputDecoration(
+                    labelText: 'موديل السيارة',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true)
+                      return 'يرجى إدخال موديل السيارة';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _vehicleColorController,
+                  decoration: const InputDecoration(
+                    labelText: 'لون السيارة',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'يرجى إدخال لون السيارة';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _vehiclePlateController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم اللوحة',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true) return 'يرجى إدخال رقم اللوحة';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _vehicleLicenseController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم رخصة السيارة',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value?.isEmpty ?? true)
+                      return 'يرجى إدخال رقم رخصة السيارة';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                _buildImagePicker('صورة رخصة السيارة', 'vehicleLicense',
+                    _vehicleLicenseImage),
+                const SizedBox(height: 8),
+
+                _buildImagePicker('صورة السيارة', 'vehicle', _vehicleImage),
+                const SizedBox(height: 8),
+
+                _buildImagePicker('صورة التأمين', 'insurance', _insuranceImage),
+                const SizedBox(height: 8),
+
+                _buildImagePicker('فحص الخلفية الجنائية', 'backgroundCheck',
+                    _backgroundCheckImage),
+
+                const SizedBox(height: 24),
+
+                // بيانات الطوارئ
+                const Text(
+                  'بيانات الطوارئ',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _emergencyContactController,
+                  decoration: const InputDecoration(
+                    labelText: 'رقم الطوارئ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                TextFormField(
+                  controller: _emergencyContactNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم جهة الطوارئ',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+
+                const SizedBox(height: 32),
+
+                // زر الحفظ
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _saveProfile,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text('حفظ البيانات',
+                            style: TextStyle(fontSize: 16)),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // ملاحظة مهمة
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ملاحظة مهمة:',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, color: Colors.blue),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        '• يجب إكمال جميع البيانات المطلوبة\n'
+                        '• سيتم مراجعة ملفك من قبل الإدارة\n'
+                        '• لن تتمكن من استقبال الطلبات حتى تتم الموافقة\n'
+                        '• يمكنك تحديث البيانات في أي وقت',
+                        style: TextStyle(color: Colors.blue),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         );
       }),
     );
   }
 
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.blue.shade400, Colors.blue.shade600],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.person_add,
-            size: 60,
-            color: Colors.white.withOpacity(0.9),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'مرحباً بك في تكسي البصرة',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'لبدء العمل كسائق، يجب إكمال بياناتك الشخصية',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 16,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressSection() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.assessment, color: Colors.blue.shade600),
-              const SizedBox(width: 12),
-              const Text(
-                'نسبة اكتمال البروفايل',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          LinearProgressIndicator(
-            value: completionPercentage.value / 100,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              completionPercentage.value >= 100 ? Colors.green : Colors.blue,
-            ),
-            minHeight: 8,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '${completionPercentage.value.toInt()}% مكتمل',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: completionPercentage.value >= 100
-                  ? Colors.green
-                  : Colors.blue,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMissingFieldsSection() {
-    if (missingFields.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.green.shade50,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.green.shade200),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.green.shade600),
-                const SizedBox(width: 12),
-                const Text(
-                  'مبروك! تم إكمال جميع البيانات المطلوبة',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline,
-                      color: Colors.blue.shade600, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'تم إرسال طلبك للإدارة للمراجعة والموافقة. سيتم إشعارك عند الانتهاء من المراجعة.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.blue.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
+  String _getVehicleTypeText(VehicleType type) {
+    switch (type) {
+      case VehicleType.car:
+        return 'سيارة';
+      case VehicleType.motorcycle:
+        return 'دراجة نارية';
+      case VehicleType.van:
+        return 'فان';
+      case VehicleType.truck:
+        return 'شاحنة';
     }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.warning, color: Colors.orange.shade600),
-              const SizedBox(width: 12),
-              const Text(
-                'البيانات المطلوبة',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...missingFields
-              .map((field) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Icon(Icons.circle, size: 8, color: Colors.red.shade400),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            field,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              color: Colors.black87,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ))
-              .toList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton.icon(
-            onPressed: () => _navigateToProfileEdit(),
-            icon: const Icon(Icons.edit),
-            label: const Text(
-              'إكمال البيانات',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        if (completionPercentage.value >= 100)
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: ElevatedButton.icon(
-              onPressed: () => _checkAndNavigateToHome(),
-              icon: const Icon(Icons.check_circle),
-              label: const Text(
-                'بدء العمل',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green.shade600,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
-        const SizedBox(height: 20),
-        Center(
-          child: TextButton.icon(
-            onPressed: () => _showHelpDialog(),
-            icon: const Icon(Icons.help_outline),
-            label: const Text('مساعدة'),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade600,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _navigateToProfileEdit() {
-    Get.toNamed(AppRoutes.DRIVER_PROFILE_EDIT);
-  }
-
-  Future<void> _checkAndNavigateToHome() async {
-    try {
-      final userId = authController.currentUser.value?.id;
-      if (userId == null) return;
-
-      final isComplete = await profileService.isProfileComplete(userId);
-      if (isComplete) {
-        Get.offAllNamed(AppRoutes.DRIVER_HOME);
-      } else {
-        Get.snackbar(
-          'خطأ',
-          'يرجى إكمال جميع البيانات المطلوبة أولاً',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        await _loadProfileStatus(); // إعادة تحميل الحالة
-      }
-    } catch (e) {
-      print('خطأ في التحقق من اكتمال البروفايل: $e');
-    }
-  }
-
-  void _showHelpDialog() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('مساعدة'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'لبدء العمل كسائق، تحتاج إلى:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 12),
-            Text('• إكمال البيانات الشخصية'),
-            Text('• رفع صورة الهوية'),
-            Text('• رفع صورة الرخصة'),
-            Text('• رفع صورة السيارة'),
-            Text('• تحديد منطقة العمل'),
-            Text('• إضافة الحساب البنكي'),
-            SizedBox(height: 12),
-            Text(
-              'سيتم مراجعة بياناتك من قبل الإدارة خلال 24 ساعة',
-              style: TextStyle(fontStyle: FontStyle.italic),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('فهمت'),
-          ),
-        ],
-      ),
-    );
   }
 }

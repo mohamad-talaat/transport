@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "transport.app.com"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "transport.app.com"
-        minSdkVersion 23
+        minSdkVersion flutter.minSdkVersion
         targetSdkVersion 34
         versionCode 1
         versionName "1.0.0"

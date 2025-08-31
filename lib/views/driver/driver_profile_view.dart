@@ -174,7 +174,7 @@ class DriverProfileView extends StatelessWidget {
       // إعادة تحميل بيانات المستخدم من Firebase
       if (authController.currentUser.value?.id != null) {
         await authController
-            .loadUserData(authController.currentUser.value!.id!);
+            .loadUserData(authController.currentUser.value!.id);
       }
 
       Get.snackbar(
@@ -882,7 +882,7 @@ class DriverProfileView extends StatelessWidget {
 
       // تحديث بيانات المستخدم من Firebase
       if (authController.currentUser.value?.id != null) {
-        await authController.loadUserData(authController.currentUser.value!.id!);
+        await authController.loadUserData(authController.currentUser.value!.id);
       }
 
       // تحديث إحصائيات السائق

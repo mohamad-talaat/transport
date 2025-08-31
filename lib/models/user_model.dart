@@ -157,6 +157,7 @@ class DriverModel extends UserModel {
   final List<String> workingAreas; // مناطق العمل
   final String? licenseImage; // صورة الرخصة
   final String? idCardImage; // صورة الهوية
+  @override
   final bool isProfileComplete; // هل اكتمل الملف الشخصي
   final String? vehicleRegistrationImage; // صورة تسجيل السيارة
   final String? insuranceImage; // صورة التأمين

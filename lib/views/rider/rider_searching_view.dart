@@ -38,7 +38,10 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _startSearching();
+    // تشغيل الطلب بعد أول إطار لتجنب setState أثناء البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startSearching();
+    });
   }
 
   void _initializeAnimations() {
@@ -89,6 +92,13 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
 
   void _startSearching() async {
     try {
+      // إذا كانت هناك رحلة نشطة قيد الانتظار، لا تطلب مرة أخرى
+      if (tripController.hasActiveTrip.value &&
+          tripController.activeTrip.value != null &&
+          tripController.activeTrip.value!.status == TripStatus.pending) {
+        return;
+      }
+
       await tripController.requestTrip(
         pickup: widget.pickup,
         destination: widget.destination,
@@ -125,6 +135,8 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
 
   @override
   Widget build(BuildContext context) {
+    final double screenHeight = MediaQuery.of(context).size.height;
+    final bool isSmall = screenHeight < 700;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -135,27 +147,31 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
 
             // Main Content
             Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Searching Animation
-                  _buildSearchingAnimation(),
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Searching Animation
+                    _buildSearchingAnimation(small: isSmall),
 
-                  const SizedBox(height: 40),
+                    SizedBox(height: isSmall ? 16 : 40),
 
-                  // Trip Details
-                  _buildTripDetails(),
+                    // Trip Details
+                    _buildTripDetails(),
 
-                  const SizedBox(height: 40),
+                    SizedBox(height: isSmall ? 16 : 40),
 
-                  // Search Status
-                  _buildSearchStatus(),
+                    // Search Status
+                    _buildSearchStatus(),
 
-                  const SizedBox(height: 60),
+                    SizedBox(height: isSmall ? 20 : 60),
 
-                  // Cancel Button
-                  _buildCancelButton(),
-                ],
+                    // Cancel Button
+                    _buildCancelButton(),
+                  ],
+                ),
               ),
             ),
           ],
@@ -189,17 +205,19 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
     );
   }
 
-  Widget _buildSearchingAnimation() {
+  Widget _buildSearchingAnimation({bool small = false}) {
     return AnimatedBuilder(
       animation: Listenable.merge([_pulseController, _rotateController]),
       builder: (context, child) {
+        final double outerSize = small ? 90 : 120;
+        final double innerSize = small ? 60 : 80;
         return Transform.scale(
           scale: _pulseAnimation.value,
           child: Transform.rotate(
             angle: _rotateAnimation.value * 2 * 3.14159,
             child: Container(
-              width: 120,
-              height: 120,
+              width: outerSize,
+              height: outerSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
@@ -213,8 +231,8 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
               ),
               child: Center(
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: innerSize,
+                  height: innerSize,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: Colors.blue,
@@ -390,7 +408,7 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
       child: ElevatedButton(
         onPressed: () => _cancelSearch(),
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red,
+          backgroundColor: Colors.orange.shade400,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 15),
           shape: RoundedRectangleBorder(
@@ -407,28 +425,71 @@ class _RiderSearchingViewState extends State<RiderSearchingView>
       ),
     );
   }
+void _cancelSearch() {
+  if (Get.isSnackbarOpen == true) {
+    try {
+      Get.closeCurrentSnackbar();
+    } catch (_) {}
+  }
 
-  void _cancelSearch() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('إلغاء البحث'),
-        content: const Text('هل أنت متأكد من إلغاء البحث عن سائق؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('لا'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Get.back();
-              tripController.cancelTrip();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child:
-                const Text('نعم، إلغاء', style: TextStyle(color: Colors.white)),
+  Get.dialog(
+    AlertDialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16), // زوايا ناعمة
+      ),
+      title: Row(
+        children: const [
+          Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+          SizedBox(width: 8),
+          Text(
+            'إلغاء البحث',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
           ),
         ],
       ),
-    );
-  }
+      content: const Text(
+        'هل أنت متأكد أنك تريد إلغاء البحث عن سائق؟',
+        style: TextStyle(fontSize: 15, height: 1.4),
+      ),
+      actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      actions: [
+        TextButton(
+          onPressed: () => Get.back(),
+          child: const Text(
+            'لا',
+            style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            Future.microtask(() async {
+              if (Get.isSnackbarOpen == true) {
+                try {
+                  Get.closeCurrentSnackbar();
+                } catch (_) {}
+              }
+              Get.back();
+              await tripController.cancelTrip();
+            });
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          icon: const Icon(Icons.close, color: Colors.white, size: 18),
+          label: const Text(
+            'نعم، إلغاء',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 }

@@ -11,6 +11,7 @@
 ## الخدمات المضافة
 
 ### 1. SmartImageService
+
 الخدمة الرئيسية التي تختار أفضل حل متاح تلقائياً:
 
 ```dart
@@ -31,6 +32,7 @@ await imageService.setPreferredMethod(ImageUploadMethod.firebaseStorage);
 ```
 
 ### 2. FreeImageUploadService (ImgBB)
+
 خدمة رفع مجانية باستخدام ImgBB:
 
 ```dart
@@ -44,6 +46,7 @@ final imageUrl = await imgbbService.uploadImageToImgBB(
 ```
 
 ### 3. LocalImageService
+
 خدمة حفظ محلي:
 
 ```dart
@@ -66,6 +69,7 @@ await localService.clearAllImages();
 ## كيفية الاستخدام
 
 ### 1. من خلال الإعدادات
+
 1. اذهب إلى **الإعدادات** في التطبيق
 2. اختر **إعدادات رفع الصور**
 3. اختر الطريقة المفضلة:
@@ -74,6 +78,7 @@ await localService.clearAllImages();
    - **Firebase Storage (مدفوع)** - احترافي وآمن
 
 ### 2. برمجياً
+
 ```dart
 // الحصول على الخدمة
 final imageService = Get.find<SmartImageService>();
@@ -90,9 +95,9 @@ if (file != null) {
     folder: 'users/$userId/profile',
     fileName: 'profile_${DateTime.now().millisecondsSinceEpoch}',
   );
-  
+
   if (result != null) {
-    print('تم رفع الصورة: $result');
+    logger.w('تم رفع الصورة: $result');
   }
 }
 ```
@@ -114,6 +119,7 @@ static const String _imgbbApiKey = 'YOUR_API_KEY_HERE';
 ## المميزات
 
 ### الحفظ المحلي
+
 - ✅ مجاني تماماً
 - ✅ سريع جداً
 - ✅ لا يحتاج إنترنت
@@ -122,6 +128,7 @@ static const String _imgbbApiKey = 'YOUR_API_KEY_HERE';
 - ❌ لا يمكن مشاركة الصور
 
 ### ImgBB
+
 - ✅ مجاني تماماً
 - ✅ رفع للإنترنت
 - ✅ 32 ميجابايت لكل صورة
@@ -130,6 +137,7 @@ static const String _imgbbApiKey = 'YOUR_API_KEY_HERE';
 - ❌ محدود بـ 32 ميجابايت
 
 ### Firebase Storage
+
 - ✅ خدمة احترافية
 - ✅ مساحة غير محدودة
 - ✅ تحكم كامل
@@ -140,12 +148,14 @@ static const String _imgbbApiKey = 'YOUR_API_KEY_HERE';
 ## استكشاف الأخطاء
 
 ### إذا فشل رفع الصور:
+
 1. **تحقق من الاتصال**: تأكد من وجود إنترنت
 2. **جرب طريقة أخرى**: النظام سيجرب تلقائياً
 3. **تحقق من المساحة**: إذا كنت تستخدم الحفظ المحلي
 4. **تحقق من API Key**: إذا كنت تستخدم ImgBB
 
 ### رسائل الخطأ الشائعة:
+
 - `No AppCheckProvider installed`: Firebase Storage غير مفعل
 - `Object does not exist`: الملف غير موجود في Storage
 - `TimeoutException`: مشكلة في الاتصال
@@ -154,12 +164,14 @@ static const String _imgbbApiKey = 'YOUR_API_KEY_HERE';
 ## التوصيات
 
 ### للتطوير والاختبار:
+
 ```dart
 // استخدم الحفظ المحلي
 await imageService.setPreferredMethod(ImageUploadMethod.local);
 ```
 
 ### للتطبيق الإنتاجي:
+
 ```dart
 // استخدم ImgBB أو Firebase
 await imageService.setPreferredMethod(ImageUploadMethod.imgbb);
@@ -168,6 +180,7 @@ await imageService.setPreferredMethod(ImageUploadMethod.firebaseStorage);
 ```
 
 ### للاستخدام المختلط:
+
 ```dart
 // دع النظام يختار تلقائياً
 // سيجرب الطريقة المفضلة أولاً، ثم الطرق الأخرى
@@ -184,6 +197,7 @@ await imageService.setPreferredMethod(ImageUploadMethod.firebaseStorage);
 ## الدعم
 
 إذا واجهت أي مشاكل:
+
 1. تحقق من هذا الملف
 2. راجع الأخطاء في Console
 3. جرب طريقة رفع مختلفة

@@ -117,18 +117,27 @@ class TripController extends GetxController {
     required LocationPoint pickup,
     required LocationPoint destination,
   }) async {
-    // منع بدء طلب جديد أثناء البحث الحالي
-    if (isRequestingTrip.value) return;
-    if (activeSearchUntil.value != null &&
-        DateTime.now().isBefore(activeSearchUntil.value!)) {
-      final remaining = activeSearchUntil.value!.difference(DateTime.now());
-      Get.snackbar('انتظار',
-          'يرجى الانتظار ${remaining.inMinutes}:${(remaining.inSeconds % 60).toString().padLeft(2, '0')} قبل طلب رحلة جديدة',
-          snackPosition: SnackPosition.BOTTOM);
-      return;
-    }
-
     try {
+      if (isRequestingTrip.value) return; // ✅ منع أي استدعاء إضافي
+isRequestingTrip.value = true;
+      // منع تكرار إنشاء رحلتين إذا كانت هناك رحلة نشطة قيد الانتظار
+      if (hasActiveTrip.value &&
+          activeTrip.value != null &&
+          activeTrip.value!.status == TripStatus.pending) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // تأكد من الذهاب لصفحة البحث إن لم يكن هناك تنقل سابق
+          if (Get.currentRoute != AppRoutes.RIDER_SEARCHING) {
+            Get.toNamed(AppRoutes.RIDER_SEARCHING, arguments: {
+              'pickup': activeTrip.value!.pickupLocation,
+              'destination': activeTrip.value!.destinationLocation,
+              'estimatedFare': activeTrip.value!.fare,
+              'estimatedDuration': activeTrip.value!.estimatedDuration,
+            });
+          }
+        });
+        return;
+      }
+
       isRequestingTrip.value = true;
 
       // التحقق من الرصيد
@@ -148,12 +157,15 @@ class TripController extends GetxController {
 
       // التحقق من كفاية الرصيد
       if (user.balance < fare) {
-        Get.snackbar(
-          'رصيد غير كافي',
-          'يرجى شحن المحفظة أولاً',
-          snackPosition: SnackPosition.BOTTOM,
-        );
-        Get.toNamed(AppRoutes.RIDER_ADD_BALANCE);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.snackbar(
+            'رصيد غير كافي',
+            'يرجى شحن المحفظة أولاً',
+            snackPosition: SnackPosition.BOTTOM,
+          );
+          // Get.toNamed(AppRoutes.RIDER_ADD_BALANCE);
+          Get.toNamed(AppRoutes.RIDER_WALLET);
+        });
         return;
       }
 
@@ -180,6 +192,9 @@ class TripController extends GetxController {
 
       // حفظ الرحلة في قاعدة البيانات
       await _firestore.collection('trips').doc(tripId).set(newTrip.toMap());
+if (authController.mockMode.value) {
+  await AuthController.to.simulateTripFlow(user.id);
+}
 
       // تحديث الحالة المحلية
       activeTrip.value = newTrip;
@@ -187,30 +202,39 @@ class TripController extends GetxController {
       // بدء الاستماع لتحديثات الرحلة
       _listenToTripUpdates(tripId);
 
-      // إشعار السائقين المتاحين
-      await _notifyAvailableDrivers(newTrip);
-
-      // الانتقال لشاشة البحث
-      Get.toNamed(AppRoutes.RIDER_SEARCHING, arguments: {
-        'pickup': pickup,
-        'destination': destination,
-        'estimatedFare': fare,
-        'estimatedDuration': estimatedDuration,
+      // الانتقال لشاشة البحث أولاً
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Get.toNamed(AppRoutes.RIDER_SEARCHING, arguments: {
+          'pickup': pickup,
+          'destination': destination,
+          'estimatedFare': fare,
+          'estimatedDuration': estimatedDuration,
+        });
       });
+
+      // إشعار السائقين المتاحين بعد الانتقال
+    //  WidgetsBinding.instance.addPostFrameCallback((_) async {
+        await _notifyAvailableDrivers(newTrip);
+    //  });
 
       // بدء عداد زمني لإلغاء الرحلة تلقائياً إذا لم يتم قبولها
       _startTripTimeoutTimer(newTrip);
+
       // بدء عدّاد مرئي 5 دقائق
       _startSearchCountdown(const Duration(minutes: 5));
     } catch (e) {
       logger.w('خطأ في طلب الرحلة: $e');
-      Get.snackbar(
-        'خطأ',
-        'تعذر طلب الرحلة، يرجى المحاولة مرة أخرى',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      if (activeTrip.value == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.snackbar(
+            'خطأ',
+            'تعذر طلب الرحلة، يرجى المحاولة مرة أخرى',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+        });
+      }
     } finally {
       isRequestingTrip.value = false;
     }
@@ -281,35 +305,6 @@ class TripController extends GetxController {
     } catch (e) {
       logger.w('خطأ في إشعار السائقين: $e');
     }
-  }
-
-  /// البحث عن السائقين القريبين
-  List<DriverModel> _findNearbyDrivers(LatLng pickupLocation,
-      {double radius = 5.0}) {
-    List<DriverModel> nearbyDrivers = [];
-
-    for (DriverModel driver in availableDrivers) {
-      if (driver.currentLat != null && driver.currentLng != null) {
-        LatLng driverLocation = LatLng(driver.currentLat!, driver.currentLng!);
-        double distance =
-            locationService.calculateDistance(pickupLocation, driverLocation);
-
-        if (distance <= radius) {
-          nearbyDrivers.add(driver);
-        }
-      }
-    }
-
-    // ترتيب حسب المسافة
-    nearbyDrivers.sort((a, b) {
-      double distanceA = locationService.calculateDistance(
-          pickupLocation, LatLng(a.currentLat!, a.currentLng!));
-      double distanceB = locationService.calculateDistance(
-          pickupLocation, LatLng(b.currentLat!, b.currentLng!));
-      return distanceA.compareTo(distanceB);
-    });
-
-    return nearbyDrivers;
   }
 
   /// بدء عداد إلغاء الرحلة التلقائي
@@ -543,11 +538,11 @@ class TripController extends GetxController {
       _clearActiveTrip();
       _stopSearchCountdown(); // إذا ألغى الراكب بنفسه
 
-      Get.snackbar(
-        'تم الإلغاء',
-        'تم إلغاء الرحلة بنجاح',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+      // Get.snackbar(
+      //   'تم الإلغاء',
+      //   'تم إلغاء الرحلة بنجاح',
+      //   snackPosition: SnackPosition.BOTTOM,
+      // );
       Get.offAllNamed(AppRoutes.RIDER_HOME);
     } catch (e) {
       logger.w('خطأ في إلغاء الرحلة: $e');

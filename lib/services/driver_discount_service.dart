@@ -66,8 +66,7 @@ class DriverDiscountService extends GetxService {
       }
 
       // التحقق من تاريخ انتهاء الصلاحية
-      if (discountCode.expiryDate != null &&
-          DateTime.now().isAfter(discountCode.expiryDate!)) {
+      if (DateTime.now().isAfter(discountCode.expiryDate)) {
         return {
           'success': false,
           'message': 'كود الخصم منتهي الصلاحية',

@@ -55,6 +55,10 @@ class MapControllerr extends GetxController {
   // Services
   final LocationService _locationService = LocationService.to;
 
+  // Route drawing streams
+  StreamSubscription<List<LatLng>>? _routeDrawingSubscription;
+  Timer? _searchDebounceTimer;
+
   @override
   void onInit() {
     super.onInit();
@@ -64,10 +68,15 @@ class MapControllerr extends GetxController {
     ever(currentLocation, (LatLng? location) {
       if (location != null) {
         _updateCurrentLocationMarker(location);
-        // تحديث المسار إذا كان هناك وجهة محددة
-        if (selectedLocation.value != null) {
-          _updateRouteToSelectedLocation(selectedLocation.value!);
-        }
+        // تحديث المسار فوراً عند تغيير الموقع الحالي
+        _updateRouteIfNeeded();
+      }
+    });
+
+    // Listen to selected location changes
+    ever(selectedLocation, (LatLng? location) {
+      if (location != null && currentLocation.value != null) {
+        _updateRouteToSelectedLocation(location);
       }
     });
   }
@@ -84,7 +93,6 @@ class MapControllerr extends GetxController {
         mapCenter.value = location;
         currentAddress.value = _locationService.currentAddress.value;
         // تحريك الخريطة إلى الموقع الحالي
-
         moveToLocation(location);
         isMapReady.value = true;
       } else {
@@ -110,9 +118,11 @@ class MapControllerr extends GetxController {
   /// تهيئة الخريطة عند جاهزيتها
   void onMapReady() {
     isMapReady.value = true;
-    if (currentLocation.value != null) {
-      moveToLocation(currentLocation.value!);
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (currentLocation.value != null) {
+        moveToLocation(currentLocation.value!);
+      }
+    });
   }
 
   /// عرض مسار الرحلة
@@ -172,43 +182,52 @@ class MapControllerr extends GetxController {
     _fitBoundsToRoute(allPoints);
   }
 
-  /// تحريك الخريطة إلى موقع معين (طريقة بديلة)
-  void _moveToLocationInternal(LatLng location, {double zoom = 16.0}) {
-    if (!isMapReady.value) return;
-
-    try {
-      mapController.move(location, zoom);
-      mapCenter.value = location;
-      mapZoom.value = zoom;
-    } catch (e) {
-      logger.f('خطأ في تحريك الخريطة: $e');
-    }
-  }
-
-  /// البحث عن موقع
+  /// البحث عن موقع مع debounce للسرعة
   Future<void> searchLocation(String query) async {
     if (query.trim().isEmpty) {
       searchResults.clear();
       return;
     }
 
+    // Cancel previous search timer
+    _searchDebounceTimer?.cancel();
+
+    // Set searching state immediately
     isSearching.value = true;
 
-    try {
-      List<LocationSearchResult> results =
-          await _locationService.searchLocationAdvanced(query);
+    // Debounce search to improve performance
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        List<LocationSearchResult> results =
+            await _locationService.searchLocationAdvanced(query);
 
-      searchResults.assignAll(results);
-    } catch (e) {
-      logger.f('خطأ في البحث: $e');
-      Get.snackbar(
-        'خطأ في البحث',
-        'تعذر البحث عن الموقع المطلوب',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    } finally {
-      isSearching.value = false;
-    }
+        // ترتيب النتائج حسب المسافة من الموقع الحالي
+        if (currentLocation.value != null) {
+          results.sort((a, b) {
+            double distanceA = _locationService.calculateDistance(
+              currentLocation.value!,
+              a.latLng,
+            );
+            double distanceB = _locationService.calculateDistance(
+              currentLocation.value!,
+              b.latLng,
+            );
+            return distanceA.compareTo(distanceB);
+          });
+        }
+
+        searchResults.assignAll(results);
+      } catch (e) {
+        logger.f('خطأ في البحث: $e');
+        Get.snackbar(
+          'خطأ في البحث',
+          'تعذر البحث عن الموقع المطلوب',
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      } finally {
+        isSearching.value = false;
+      }
+    });
   }
 
   /// تحديد موقع من نتائج البحث
@@ -224,11 +243,16 @@ class MapControllerr extends GetxController {
 
     // مسح نتائج البحث
     searchResults.clear();
-    // ملء حقل البحث باسم الوجهة المختارة
-    searchController.text = result.name;
+    // ملء حقل البحث باسم الوجهة المختارة مع التحقق من الحالة
+    if (!isClosed) {
+      try {
+        searchController.text = result.name;
+      } catch (e) {
+        logger.w('تم تجاهل خطأ في تعيين searchController: $e');
+      }
+    }
 
-    // تحديث البولي لاين والسهم إذا كان هناك موقع انطلاق محدد
-    _updateRouteToSelectedLocation(result.latLng);
+    // تحديث المسار سيتم تلقائياً عبر ever listener
   }
 
   /// تعيين محطة وسطى من نتيجة البحث
@@ -236,8 +260,14 @@ class MapControllerr extends GetxController {
     middleStopLocation.value = result.latLng;
     middleStopAddress.value = result.address;
 
-    // ملء حقل نص المحطة الوسطى
-    middleStopController.text = result.name;
+    // ملء حقل نص المحطة الوسطى مع التحقق من الحالة
+    if (!isClosed) {
+      try {
+        middleStopController.text = result.name;
+      } catch (e) {
+        logger.w('تم تجاهل خطأ في تعيين middleStopController: $e');
+      }
+    }
 
     // إضافة علامة للمحطة الوسطى
     _addMiddleStopMarker(result.latLng, result.name);
@@ -245,10 +275,23 @@ class MapControllerr extends GetxController {
     // مسح نتائج البحث فقط
     searchResults.clear();
 
-    // تحديث المسار إذا كان هناك وجهة محددة
-    if (selectedLocation.value != null) {
-      _updateRouteToSelectedLocation(selectedLocation.value!);
-    }
+    // تحديث المسار
+    _updateRouteIfNeeded();
+  }
+
+  /// تعيين محطة وسطى من الخريطة مباشرة
+  void setMiddleStopFromMap(LatLng latLng, {String? title}) {
+    middleStopLocation.value = latLng;
+    middleStopAddress.value = title ?? 'محطة وسطى';
+    _addMiddleStopMarker(latLng, title ?? 'محطة وسطى');
+    _updateRouteIfNeeded();
+    Get.snackbar(
+      'تم إضافة المحطة',
+      'تمت إضافة محطة وسطى بنجاح',
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.green,
+      colorText: Colors.white,
+    );
   }
 
   void clearMiddleStop() {
@@ -256,108 +299,118 @@ class MapControllerr extends GetxController {
     middleStopAddress.value = '';
     markers.removeWhere((m) => m.key == const Key('middle_stop'));
 
-    // تحديث المسار إذا كان هناك وجهة محددة
-    if (selectedLocation.value != null) {
+    // تحديث المسار
+    _updateRouteIfNeeded();
+  }
+
+  /// تحديث المسار إذا كانت هناك حاجة
+  void _updateRouteIfNeeded() {
+    if (currentLocation.value != null && selectedLocation.value != null) {
       _updateRouteToSelectedLocation(selectedLocation.value!);
     }
   }
 
-  /// تحديث المسار إلى الموقع المحدد
+  /// رسم المسار مباشرة مع stream للتحديث الفوري
   void _updateRouteToSelectedLocation(LatLng destination) {
-    // إذا كان هناك موقع انطلاق محدد (الموقع الحالي أو موقع محدد مسبقاً)
-    LatLng? startLocation = currentLocation.value;
+    final LatLng? from = currentLocation.value;
+    if (from == null) return;
 
-    if (startLocation != null) {
-      // إنشاء مسار مباشر بين نقطة البداية والوجهة
-      List<LatLng> routePoints = [startLocation, destination];
+    // Cancel previous route subscription
+    _routeDrawingSubscription?.cancel();
 
-      // إضافة محطة وسطى إذا كانت موجودة
-      if (middleStopLocation.value != null) {
-        routePoints = [startLocation, middleStopLocation.value!, destination];
-      }
+    // Start loading
+    isLoading.value = true;
 
-      // تحديث البولي لاين
-      _updateRoutePolyline(routePoints);
-
-      // إضافة سهم اتجاه
-      _addDirectionArrow(routePoints);
-
-      // تحريك الخريطة لتظهر المسار كاملاً
-      _fitBoundsToRoute(routePoints);
-    }
-  }
-
-  /// تحديث البولي لاين للمسار
-  void _updateRoutePolyline(List<LatLng> routePoints) {
-    polylines.clear();
-    polylines.add(
-      Polyline(
-        points: routePoints,
-        strokeWidth: 4,
-        color: Colors.blue,
-      ),
+    // Create a stream for route drawing
+    _routeDrawingSubscription = _getRouteStream(from, destination).listen(
+      (routePoints) {
+        if (routePoints.isNotEmpty) {
+          drawTripRoute(routePoints);
+        }
+        isLoading.value = false;
+      },
+      onError: (error) {
+        logger.w('خطأ في رسم المسار: $error');
+        // Keep the temporary straight line on error
+        isLoading.value = false;
+      },
     );
   }
 
-  /// إضافة سهم اتجاه للمسار
-  void _addDirectionArrow(List<LatLng> routePoints) {
-    if (routePoints.length < 2) return;
+  /// اختيار موقع من الخريطة مباشرة وتحديث كل شيء فوراً
+  Future<void> selectLocationFromMap(LatLng point) async {
+    try {
+      // تأكد من وجود الموقع الحالي، لو مش موجود حاول تجيبه سريعاً مرة واحدة
+      if (currentLocation.value == null) {
+        try {
+          final loc = await _locationService.getCurrentLocation();
+          if (loc != null) {
+            currentLocation.value = loc;
+          }
+        } catch (_) {}
+      }
 
-    // إزالة الأسهم السابقة
-    markers.removeWhere((m) => m.key.toString().contains('direction_arrow'));
+      selectedLocation.value = point;
 
-    // إضافة سهم في منتصف المسار
-    for (int i = 0; i < routePoints.length - 1; i++) {
-      LatLng start = routePoints[i];
-      LatLng end = routePoints[i + 1];
+      // تحريك الخريطة وإضافة علامة
+      moveToLocation(point);
+      addSelectedLocationMarker(point, 'الوجهة');
 
-      // حساب نقطة منتصف المسار
-      LatLng midPoint = LatLng(
-        (start.latitude + end.latitude) / 2,
-        (start.longitude + end.longitude) / 2,
-      );
+      // جلب العنوان وتعبئة حقل البحث
+      final String address =
+          await _locationService.getAddressFromLocation(point);
+      selectedAddress.value = address;
+      // قد يكون الحقل غير موجود مؤقتاً أثناء إعادة البناء
+      // تحرّس قبل الكتابة
+      if (!isClosed && Get.isRegistered<MapControllerr>()) {
+        try {
+          searchController.text = address;
+        } catch (_) {}
+      }
 
-      // حساب اتجاه السهم
-      double bearing = _calculateBearing(start, end);
-
-      markers.add(
-        Marker(
-          key: Key('direction_arrow_$i'),
-          point: midPoint,
-          width: 30,
-          height: 30,
-          child: Transform.rotate(
-            angle: bearing * (math.pi / 180), // تحويل الدرجات إلى راديان
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2),
-              ),
-              child: const Icon(
-                Icons.arrow_forward,
-                color: Colors.white,
-                size: 16,
-              ),
-            ),
-          ),
-        ),
-      );
+      // تحديث المسار فوراً
+      _updateRouteIfNeeded();
+    } catch (e) {
+      logger.w('خطأ في اختيار موقع من الخريطة: $e');
     }
   }
 
-  /// حساب اتجاه السهم بين نقطتين
-  double _calculateBearing(LatLng start, LatLng end) {
-    double lat1 = start.latitude * (math.pi / 180);
-    double lat2 = end.latitude * (math.pi / 180);
-    double dLon = (end.longitude - start.longitude) * (math.pi / 180);
+  /// Create a stream for route fetching
+  Stream<List<LatLng>> _getRouteStream(LatLng from, LatLng destination) async* {
+    try {
+      final bool hasMiddle = middleStopLocation.value != null;
 
-    double y = math.sin(dLon) * math.cos(lat2);
-    double x = math.cos(lat1) * math.sin(lat2) -
-        math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+      List<LatLng> route;
+      if (hasMiddle) {
+        final mid = middleStopLocation.value!;
+        // التحقق من صحة المحطة الوسطى
+        final total = _locationService.calculateDistance(from, destination);
+        final d1 = _locationService.calculateDistance(from, mid);
+        final d2 = _locationService.calculateDistance(mid, destination);
 
-    double bearing = math.atan2(y, x) * (180 / math.pi);
-    return (bearing + 360) % 360;
+        if (d1 + d2 > total * 1.3) {
+          Get.snackbar(
+            'محطة غير صالحة',
+            'المحطة الوسطى يجب أن تكون بين موقعك والوجهة.',
+            snackPosition: SnackPosition.BOTTOM,
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+          );
+          yield [from, destination]; // fallback to straight line
+          return;
+        }
+
+        route =
+            await _locationService.getRouteWithWaypoint(from, mid, destination);
+      } else {
+        route = await _locationService.getRoute(from, destination);
+      }
+
+      yield route;
+    } catch (e) {
+      logger.w('خطأ في الحصول على المسار: $e');
+      yield [from, destination]; // fallback to straight line
+    }
   }
 
   /// إضافة علامة الموقع الحالي
@@ -373,7 +426,6 @@ class MapControllerr extends GetxController {
         point: location,
         width: 40.0,
         height: 40.0,
-        //  builder: (ctx) => Container(
         child: Container(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
@@ -598,17 +650,6 @@ class MapControllerr extends GetxController {
 
     try {
       mapController.fitCamera(CameraFit.bounds(bounds: bounds));
-      //fitBoundsToRoute(points);
-      // mapController.fitBounds(
-      //   bounds,
-      //   options: FitBoundsOptions(
-      //     padding: EdgeInsets.all(20),
-      //     maxZoom: 18.0,
-      //     inside: true,
-      //     forceIntegerZoomLevel: true,
-      //   ),
-      // );
-      // mapCenter.value = bounds.center;
     } catch (e) {
       logger.f('خطأ في تعديل حدود الخريطة: $e');
     }
@@ -685,6 +726,38 @@ class MapControllerr extends GetxController {
     selectedAddress.value = '';
     activeTrip.value = null;
     driverLocation.value = null;
+
+    // التحقق من أن الـ controller لم يتم التخلص منه قبل استخدامه
+    if (!isClosed) {
+      try {
+        searchController.clear(); // Clear search field
+      } catch (e) {
+        // تجاهل الخطأ إذا كان الـ controller تم التخلص منه
+        logger.w('تم تجاهل خطأ في مسح searchController: $e');
+      }
+    }
+    searchResults.clear();
+  }
+
+  /// مسح البحث
+  void clearSearch() {
+    // التحقق من أن الـ controller لم يتم التخلص منه قبل استخدامه
+    if (!isClosed) {
+      try {
+        searchController.clear();
+      } catch (e) {
+        // تجاهل الخطأ إذا كان الـ controller تم التخلص منه
+        logger.w('تم تجاهل خطأ في مسح searchController في clearSearch: $e');
+      }
+    }
+    searchResults.clear();
+    selectedLocation.value = null;
+    selectedAddress.value = '';
+    polylines.clear(); // Clear any drawn routes
+
+    // Remove selected location marker
+    markers
+        .removeWhere((marker) => marker.key == const Key('selected_location'));
   }
 
   /// تحديث الموقع الحالي
@@ -711,8 +784,22 @@ class MapControllerr extends GetxController {
 
   @override
   void onClose() {
-    searchController.dispose();
-    middleStopController.dispose();
+    _routeDrawingSubscription?.cancel();
+    _searchDebounceTimer?.cancel();
+
+    // التخلص من الـ controllers بأمان
+    // try {
+    //   searchController.dispose();
+    // } catch (e) {
+    //   logger.w('خطأ في التخلص من searchController: $e');
+    // }
+
+    // try {
+    //   middleStopController.dispose();
+    // } catch (e) {
+    //   logger.w('خطأ في التخلص من middleStopController: $e');
+    // }
+
     super.onClose();
   }
 }

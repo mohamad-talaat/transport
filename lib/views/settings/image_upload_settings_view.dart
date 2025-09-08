@@ -105,36 +105,40 @@ class ImageUploadSettingsView extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          Obx(() => Column(
-                children: [
-                  _buildMethodOption(
-                    imageService,
-                    ImageUploadMethod.local,
-                    'محلي (مجاني)',
-                    'حفظ الصور في التطبيق',
-                    Icons.phone_android,
-                    Colors.green,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildMethodOption(
-                    imageService,
-                    ImageUploadMethod.imgbb,
-                    'ImgBB (مجاني)',
-                    'رفع الصور إلى الإنترنت',
-                    Icons.cloud,
-                    Colors.blue,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildMethodOption(
-                    imageService,
-                    ImageUploadMethod.firebaseStorage,
-                    'Firebase Storage (مدفوع)',
-                    'خدمة سحابية احترافية',
-                    Icons.storage,
-                    Colors.orange,
-                  ),
-                ],
-              )),
+          Obx(() {
+            // استخدم القيمة لإعادة البناء فقط
+            imageService.currentMethod.value;
+            return Column(
+              children: [
+                _buildMethodOption(
+                  imageService,
+                  ImageUploadMethod.local,
+                  'محلي (مجاني)',
+                  'حفظ الصور في التطبيق',
+                  Icons.phone_android,
+                  Colors.green,
+                ),
+                const SizedBox(height: 12),
+                _buildMethodOption(
+                  imageService,
+                  ImageUploadMethod.imgbb,
+                  'ImgBB (مجاني)',
+                  'رفع الصور إلى الإنترنت',
+                  Icons.cloud,
+                  Colors.blue,
+                ),
+                const SizedBox(height: 12),
+                _buildMethodOption(
+                  imageService,
+                  ImageUploadMethod.firebaseStorage,
+                  'Firebase Storage (مدفوع)',
+                  'خدمة سحابية احترافية',
+                  Icons.storage,
+                  Colors.orange,
+                ),
+              ],
+            );
+          }),
         ],
       ),
     );

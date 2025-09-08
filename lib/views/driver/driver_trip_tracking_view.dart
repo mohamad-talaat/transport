@@ -94,8 +94,8 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
     return FlutterMap(
       mapController: mapController.mapController,
       options: MapOptions(
-        center: const LatLng(30.0444, 31.2357), // Cairo
-        zoom: 15,
+        initialCenter : const LatLng(30.0444, 31.2357), // Cairo
+        initialZoom : 15,
         onMapReady: () {
           mapController.onMapReady();
         },
@@ -107,11 +107,12 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
         ),
         // Route Polyline
         Obx(() {
+          
           final trip = driverController.currentTrip.value;
           if (trip?.routePolyline != null) {
             return PolylineLayer(
               polylines: [
-                Polyline(
+                 Polyline<LatLng>(
                   points: trip!.routePolyline!,
                   strokeWidth: 4,
                   color: Colors.blue,
@@ -119,9 +120,7 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
               ],
             );
           }
-          return const PolylineLayer(
-            polylines: [],
-          );
+          return const SizedBox.shrink();
         }),
         // Markers
         MarkerLayer(

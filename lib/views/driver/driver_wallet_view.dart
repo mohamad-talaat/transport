@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/services/driver_discount_service.dart';
 import 'package:transport_app/services/firebase_service.dart';
 import 'package:transport_app/models/payment_model.dart';
@@ -51,7 +52,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
       final transactions = await _getRecentTransactions(userId);
       recentTransactions.value = transactions;
     } catch (e) {
-      print('خطأ في تحميل المعاملات: $e');
+      logger.w('خطأ في تحميل المعاملات: $e');
     } finally {
       isLoadingTransactions.value = false;
     }
@@ -67,7 +68,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
       final trips = await _getRecentTrips(userId);
       recentTrips.value = trips;
     } catch (e) {
-      print('خطأ في تحميل الرحلات: $e');
+      logger.w('خطأ في تحميل الرحلات: $e');
     } finally {
       isLoadingTrips.value = false;
     }
@@ -89,7 +90,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         return PaymentModel.fromMap(data);
       }).toList();
     } catch (e) {
-      print('خطأ في جلب المعاملات: $e');
+      logger.w('خطأ في جلب المعاملات: $e');
       return [];
     }
   }
@@ -111,7 +112,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         return TripModel.fromMap(data);
       }).toList();
     } catch (e) {
-      print('خطأ في جلب الرحلات: $e');
+      logger.w('خطأ في جلب الرحلات: $e');
       return [];
     }
   }
@@ -1118,7 +1119,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         'updatedAt': DateTime.now(),
       });
     } catch (e) {
-      print('خطأ في تسجيل معاملة كود الخصم: $e');
+      logger.w('خطأ في تسجيل معاملة كود الخصم: $e');
     }
   }
 

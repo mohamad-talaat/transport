@@ -3,8 +3,10 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:transport_app/models/rider_model.dart';
 import '../models/trip_model.dart';
 import '../models/user_model.dart';
+
 import '../models/payment_model.dart';
 import '../models/discount_code_model.dart';
 import '../main.dart';
@@ -21,17 +23,21 @@ class FirebaseService extends GetxService {
       StreamController<TripModel?>.broadcast();
   final StreamController<List<DriverModel>> _availableDriversController =
       StreamController<List<DriverModel>>.broadcast();
+  final StreamController<List<RiderModel>> _activeRidersController =
+      StreamController<List<RiderModel>>.broadcast();
 
   // Reactive variables
   final RxList<TripModel> tripRequests = <TripModel>[].obs;
   final Rx<TripModel?> currentTrip = Rx<TripModel?>(null);
   final RxList<DriverModel> availableDrivers = <DriverModel>[].obs;
+  final RxList<RiderModel> activeRiders = <RiderModel>[].obs;
   final RxBool isLoading = false.obs;
 
   // Stream subscriptions
   StreamSubscription<QuerySnapshot>? _tripRequestsSubscription;
   StreamSubscription<DocumentSnapshot>? _currentTripSubscription;
   StreamSubscription<QuerySnapshot>? _availableDriversSubscription;
+  StreamSubscription<QuerySnapshot>? _activeRidersSubscription;
 
   @override
   void onInit() {
@@ -55,7 +61,350 @@ class FirebaseService extends GetxService {
     _availableDriversController.stream.listen((drivers) {
       availableDrivers.value = drivers;
     });
+
+    // Stream للركاب النشطين
+    _activeRidersController.stream.listen((riders) {
+      activeRiders.value = riders;
+    });
   }
+
+  // ==================== DRIVER OPERATIONS ====================
+
+  /// جلب جميع السائقين
+  Future<List<DriverModel>> getAllDrivers() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'driver')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return DriverModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب السائقين: $e');
+      return [];
+    }
+  }
+
+  /// جلب السائقين المتاحين
+  Future<List<DriverModel>> getAvailableDrivers() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'driver')
+          .where('additionalData.isOnline', isEqualTo: true)
+          .where('additionalData.isAvailable', isEqualTo: true)
+          .where('isApproved', isEqualTo: true)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return DriverModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب السائقين المتاحين: $e');
+      return [];
+    }
+  }
+
+  Future<List<DriverModel>> getDriversByStatus(String status) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'driver')
+          .where('additionalData.status', isEqualTo: status)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return DriverModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب السائقين حسب الحالة: $e');
+      return [];
+    }
+  }
+
+  /// تحديث حالة السائق
+  Future<void> updateDriverStatus({
+    required String driverId,
+    required String status,
+    String? reason,
+    String? approvedBy,
+  }) async {
+    try {
+      Map<String, dynamic> updateData = {
+        'additionalData.status': status,
+        'additionalData.updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (reason != null) {
+        updateData['additionalData.rejectionReason'] = reason;
+      }
+      if (approvedBy != null) {
+        updateData['additionalData.approvedBy'] = approvedBy;
+      }
+
+      await _firestore.collection('users').doc(driverId).update(updateData);
+    } catch (e) {
+      logger.w('خطأ في تحديث حالة السائق: $e');
+      rethrow;
+    }
+  }
+
+  /// تحديث موقع السائق
+  Future<void> updateDriverLocation({
+    required String driverId,
+    required LatLng location,
+  }) async {
+    try {
+      final data = {
+        'additionalData.currentLat': location.latitude,
+        'additionalData.currentLng': location.longitude,
+        'additionalData.lastSeen': Timestamp.now(),
+      };
+
+      await _firestore.collection('users').doc(driverId).update(data);
+    } catch (e) {
+      logger.w('خطأ في تحديث موقع السائق: $e');
+      rethrow;
+    }
+  }
+
+  /// تحديث حالة السائق (متصل/متاح)
+  Future<void> updateDriverOnlineStatus({
+    required String driverId,
+    required bool isOnline,
+    required bool isAvailable,
+  }) async {
+    try {
+      final data = {
+        'additionalData.isOnline': isOnline,
+        'additionalData.isAvailable': isAvailable,
+        'additionalData.onlineStatusUpdatedAt': Timestamp.now(),
+      };
+
+      await _firestore.collection('users').doc(driverId).update(data);
+    } catch (e) {
+      logger.w('خطأ في تحديث حالة السائق: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== RIDER OPERATIONS ====================
+
+  /// جلب جميع الركاب
+  Future<List<RiderModel>> getAllRiders() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'rider')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return RiderModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب الركاب: $e');
+      return [];
+    }
+  }
+
+  /// جلب الركاب النشطين
+  Future<List<RiderModel>> getActiveRiders() async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'rider')
+          .where('additionalData.isActive', isEqualTo: true)
+          .where('additionalData.isApproved', isEqualTo: true)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return RiderModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب الركاب النشطين: $e');
+      return [];
+    }
+  }
+
+  /// جلب الركاب حسب الحالة
+  Future<List<RiderModel>> getRidersByStatus(String status) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'rider')
+          .where('additionalData.status', isEqualTo: status)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return RiderModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في جلب الركاب حسب الحالة: $e');
+      return [];
+    }
+  }
+
+  /// تحديث حالة الراكب
+  Future<void> updateRiderStatus({
+    required String riderId,
+    required String status,
+    String? reason,
+    String? approvedBy,
+  }) async {
+    try {
+      Map<String, dynamic> updateData = {
+        'additionalData.status': status,
+        'additionalData.updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      if (reason != null) {
+        updateData['additionalData.rejectionReason'] = reason;
+      }
+      if (approvedBy != null) {
+        updateData['additionalData.approvedBy'] = approvedBy;
+      }
+
+      await _firestore.collection('users').doc(riderId).update(updateData);
+    } catch (e) {
+      logger.w('خطأ في تحديث حالة الراكب: $e');
+      rethrow;
+    }
+  }
+
+  /// تحديث موقع الراكب
+  Future<void> updateRiderLocation({
+    required String riderId,
+    required String location,
+  }) async {
+    try {
+      final data = {
+        'additionalData.currentLocation': location,
+        'additionalData.locationUpdatedAt': Timestamp.now(),
+      };
+
+      await _firestore.collection('users').doc(riderId).update(data);
+    } catch (e) {
+      logger.w('خطأ في تحديث موقع الراكب: $e');
+      rethrow;
+    }
+  }
+
+  /// إضافة موقع مفضل للراكب
+  Future<void> addFavoriteLocation({
+    required String riderId,
+    required String location,
+  }) async {
+    try {
+      await _firestore.collection('users').doc(riderId).update({
+        'additionalData.favoriteLocations': FieldValue.arrayUnion([location]),
+        'additionalData.updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      logger.w('خطأ في إضافة الموقع المفضل: $e');
+      rethrow;
+    }
+  }
+
+  /// إزالة موقع مفضل من الراكب
+  Future<void> removeFavoriteLocation({
+    required String riderId,
+    required String location,
+  }) async {
+    try {
+      await _firestore.collection('users').doc(riderId).update({
+        'additionalData.favoriteLocations': FieldValue.arrayRemove([location]),
+        'additionalData.updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      logger.w('خطأ في إزالة الموقع المفضل: $e');
+      rethrow;
+    }
+  }
+
+  /// إضافة طريقة دفع للراكب
+  Future<void> addPaymentMethod({
+    required String riderId,
+    required String paymentMethod,
+  }) async {
+    try {
+      await _firestore.collection('users').doc(riderId).update({
+        'additionalData.paymentMethods': FieldValue.arrayUnion([paymentMethod]),
+        'additionalData.updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      logger.w('خطأ في إضافة طريقة الدفع: $e');
+      rethrow;
+    }
+  }
+
+  /// إزالة طريقة دفع من الراكب
+  Future<void> removePaymentMethod({
+    required String riderId,
+    required String paymentMethod,
+  }) async {
+    try {
+      await _firestore.collection('users').doc(riderId).update({
+        'additionalData.paymentMethods':
+            FieldValue.arrayRemove([paymentMethod]),
+        'additionalData.updatedAt': Timestamp.now(),
+      });
+    } catch (e) {
+      logger.w('خطأ في إزالة طريقة الدفع: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== SEARCH OPERATIONS ====================
+
+  /// البحث في السائقين
+  Future<List<DriverModel>> searchDrivers(String query) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'driver')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThan: '$query\uf8ff')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return DriverModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في البحث عن السائقين: $e');
+      return [];
+    }
+  }
+
+  /// البحث في الركاب
+  Future<List<RiderModel>> searchRiders(String query) async {
+    try {
+      QuerySnapshot snapshot = await _firestore
+          .collection('users')
+          .where('userType', isEqualTo: 'rider')
+          .where('name', isGreaterThanOrEqualTo: query)
+          .where('name', isLessThan: '$query\uf8ff')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return RiderModel.fromMap(data);
+      }).toList();
+    } catch (e) {
+      logger.w('خطأ في البحث عن الركاب: $e');
+      return [];
+    }
+  }
+
+  // ==================== STREAM OPERATIONS ====================
 
   /// بدء الاستماع لطلبات الرحلات للسائق
   void startListeningForTripRequests(String driverId) {
@@ -129,6 +478,7 @@ class FirebaseService extends GetxService {
         .where('userType', isEqualTo: 'driver')
         .where('additionalData.isOnline', isEqualTo: true)
         .where('additionalData.isAvailable', isEqualTo: true)
+        .where('isApproved', isEqualTo: true)
         .snapshots()
         .listen((snapshot) {
       List<DriverModel> drivers = [];
@@ -145,6 +495,51 @@ class FirebaseService extends GetxService {
       _availableDriversController.add(drivers);
     });
   }
+
+  /// بدء الاستماع للركاب النشطين
+  void startListeningForActiveRiders() {
+    _activeRidersSubscription?.cancel();
+
+    _activeRidersSubscription = _firestore
+        .collection('users')
+        .where('userType', isEqualTo: 'driver')
+        .where('additionalData.isActive', isEqualTo: true)
+        .where('isApproved', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) async {
+      List<RiderModel> riders = [];
+
+      if (snapshot.docs.isEmpty) {
+        final fb = await _firestore
+            .collection('users')
+            .where('userType', isEqualTo: 'rider')
+            .where('additionalData.isActive', isEqualTo: true)
+            .where('additionalData.isApproved', isEqualTo: true)
+            .get();
+        for (var doc in fb.docs) {
+          try {
+            RiderModel rider = RiderModel.fromMap(doc.data());
+            riders.add(rider);
+          } catch (e) {
+            logger.w('خطأ في تحويل بيانات الراكب: $e');
+          }
+        }
+      } else {
+        for (var doc in snapshot.docs) {
+          try {
+            RiderModel rider = RiderModel.fromMap(doc.data());
+            riders.add(rider);
+          } catch (e) {
+            logger.w('خطأ في تحويل بيانات الراكب: $e');
+          }
+        }
+      }
+
+      _activeRidersController.add(riders);
+    });
+  }
+
+  // ==================== TRIP OPERATIONS ====================
 
   /// إنشاء طلب رحلة جديد
   Future<TripModel> createTripRequest({
@@ -295,22 +690,7 @@ class FirebaseService extends GetxService {
     }
   }
 
-  /// تحديث موقع السائق
-  Future<void> updateDriverLocation({
-    required String driverId,
-    required LatLng location,
-  }) async {
-    try {
-      await _firestore.collection('users').doc(driverId).update({
-        'additionalData.currentLat': location.latitude,
-        'additionalData.currentLng': location.longitude,
-        'additionalData.lastSeen': Timestamp.now(),
-      });
-    } catch (e) {
-      logger.w('خطأ في تحديث موقع السائق: $e');
-      rethrow;
-    }
-  }
+  // ==================== LOCATION OPERATIONS ====================
 
   /// جلب السائقين القريبين
   Future<List<DriverModel>> getNearbyDrivers({
@@ -383,6 +763,8 @@ class FirebaseService extends GetxService {
 
     return earthRadius * c;
   }
+
+  // ==================== PAYMENT OPERATIONS ====================
 
   /// إنشاء عملية دفع
   Future<PaymentModel> createPayment({
@@ -493,6 +875,8 @@ class FirebaseService extends GetxService {
     }
   }
 
+  // ==================== STATISTICS OPERATIONS ====================
+
   /// جلب إحصائيات السائق
   Future<Map<String, dynamic>> getDriverStatistics({
     required String driverId,
@@ -539,11 +923,100 @@ class FirebaseService extends GetxService {
     }
   }
 
+  /// جلب إحصائيات الراكب
+  Future<Map<String, dynamic>> getRiderStatistics({
+    required String riderId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    try {
+      QuerySnapshot tripsSnapshot = await _firestore
+          .collection('trips')
+          .where('riderId', isEqualTo: riderId)
+          .where('status', isEqualTo: TripStatus.completed.name)
+          .where('completedAt',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+          .where('completedAt',
+              isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+          .get();
+
+      double totalSpent = 0.0;
+      int completedTrips = 0;
+      double totalDistance = 0.0;
+
+      for (var doc in tripsSnapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        totalSpent += (data['fare'] ?? 0.0).toDouble();
+        totalDistance += (data['distance'] ?? 0.0).toDouble();
+        completedTrips++;
+      }
+
+      return {
+        'totalSpent': totalSpent,
+        'completedTrips': completedTrips,
+        'totalDistance': totalDistance,
+        'averageSpentPerTrip':
+            completedTrips > 0 ? totalSpent / completedTrips : 0.0,
+      };
+    } catch (e) {
+      logger.w('خطأ في جلب إحصائيات الراكب: $e');
+      return {
+        'totalSpent': 0.0,
+        'completedTrips': 0,
+        'totalDistance': 0.0,
+        'averageSpentPerTrip': 0.0,
+      };
+    }
+  }
+
+  // ==================== USER MANAGEMENT OPERATIONS ====================
+
+  /// جلب مستخدم بواسطة ID
+  Future<UserModel?> getUserById(String userId) async {
+    try {
+      DocumentSnapshot doc =
+          await _firestore.collection('users').doc(userId).get();
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        return UserModel.fromMap(data);
+      }
+      return null;
+    } catch (e) {
+      logger.w('خطأ في جلب المستخدم: $e');
+      return null;
+    }
+  }
+
+  /// إنشاء مستخدم جديد
+  Future<void> createUser(UserModel user) async {
+    try {
+      await _firestore.collection('users').doc(user.id).set(user.toMap());
+      logger.i('تم إنشاء المستخدم بنجاح: ${user.id}');
+    } catch (e) {
+      logger.w('خطأ في إنشاء المستخدم: $e');
+      rethrow;
+    }
+  }
+
+  /// تحديث بيانات المستخدم
+  Future<void> updateUser(UserModel user) async {
+    try {
+      await _firestore.collection('users').doc(user.id).update(user.toMap());
+      logger.i('تم تحديث المستخدم بنجاح: ${user.id}');
+    } catch (e) {
+      logger.w('خطأ في تحديث المستخدم: $e');
+      rethrow;
+    }
+  }
+
+  // ==================== CLEANUP OPERATIONS ====================
+
   /// إيقاف جميع الـ Streams
   void stopAllStreams() {
     _tripRequestsSubscription?.cancel();
     _currentTripSubscription?.cancel();
     _availableDriversSubscription?.cancel();
+    _activeRidersSubscription?.cancel();
   }
 
   @override
@@ -552,6 +1025,7 @@ class FirebaseService extends GetxService {
     _tripRequestsController.close();
     _currentTripController.close();
     _availableDriversController.close();
+    _activeRidersController.close();
     super.onClose();
   }
 }

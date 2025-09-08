@@ -24,7 +24,7 @@ android {
     defaultConfig {
         applicationId = "transport.app.com"
         minSdkVersion flutter.minSdkVersion
-        targetSdkVersion 34
+        targetSdkVersion 36
         versionCode 1
         versionName "1.0.0"
         multiDexEnabled true
@@ -75,8 +75,7 @@ dependencies {
     
     // MultiDex Support
     implementation 'androidx.multidex:multidex:2.0.1'
-       implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.4'
     // Firebase BOM للتأكد من توافق الإصدارات
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-analytics'
@@ -84,13 +83,11 @@ dependencies {
     implementation 'com.google.firebase:firebase-firestore'
     implementation 'com.google.firebase:firebase-messaging'
     
-    // Google Play Services
+    // Google Play Services (auth provided by plugin; avoid forcing versions here)
     implementation 'com.google.android.gms:play-services-location:21.0.1'
     implementation 'com.google.android.gms:play-services-maps:18.2.0'
-    implementation 'com.google.android.gms:play-services-auth:20.7.0'
     
-    // Kotlin
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    // Kotlin stdlib is added by the Kotlin Gradle plugin; no need to add manually
 }
 // plugins {
 //     id "com.android.application"

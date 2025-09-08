@@ -27,139 +27,111 @@ class NotificationTestService extends GetxService {
   // ==================== إرسال التنبيهات ====================
 
   /// إرسال تنبيه لجميع المستخدمين
-  Future<bool> sendNotificationToAllUsers({
-    required String title,
-    required String body,
-    Map<String, dynamic>? data,
-  }) async {
-    try {
-      isSendingNotification.value = true;
+ Future<bool> sendNotificationToAllUsers({
+  required String title,
+  required String body,
+  Map<String, dynamic>? data,
+}) async {
+  try {
+    isSendingNotification.value = true;
 
-      // جلب جميع FCM tokens
-      final ridersSnapshot = await _firestore
-          .collection('riders')
-          .where('fcmToken', isNotEqualTo: null)
-          .get();
+    final snapshot = await _firestore
+        .collection('users')
+        .where('fcmToken', isNotEqualTo: null)
+        .get();
 
-      final driversSnapshot = await _firestore
-          .collection('drivers')
-          .where('fcmToken', isNotEqualTo: null)
-          .get();
-
-      final allTokens = <String>[];
-
-      // جمع tokens الراكبين
-      for (var doc in ridersSnapshot.docs) {
-        final token = doc.data()['fcmToken'] as String?;
-        if (token != null && token.isNotEmpty) {
-          allTokens.add(token);
-        }
+    final allTokens = <String>[];
+    for (var doc in snapshot.docs) {
+      final token = doc.data()['fcmToken'] as String?;
+      if (token != null && token.isNotEmpty) {
+        allTokens.add(token);
       }
+    }
 
-      // جمع tokens السائقين
-      for (var doc in driversSnapshot.docs) {
-        final token = doc.data()['fcmToken'] as String?;
-        if (token != null && token.isNotEmpty) {
-          allTokens.add(token);
-        }
-      }
+    if (allTokens.isEmpty) {
+      _logger.w('لا توجد FCM tokens متاحة');
+      return false;
+    }
 
-      if (allTokens.isEmpty) {
-        _logger.w('لا توجد FCM tokens متاحة');
-        return false;
-      }
+    final success = await _sendFCMNotification(
+      tokens: allTokens,
+      title: title,
+      body: body,
+      data: data,
+    );
 
-      // إرسال التنبيه لجميع المستخدمين
-      final success = await _sendFCMNotification(
-        tokens: allTokens,
+    if (success) {
+      await _saveNotificationToDatabase(
         title: title,
         body: body,
         data: data,
+        sentToAll: true,
       );
 
-      if (success) {
-        // حفظ التنبيه في قاعدة البيانات
-        await _saveNotificationToDatabase(
-          title: title,
-          body: body,
-          data: data,
-          sentToAll: true,
-        );
-
-        sentNotifications.add('تم إرسال التنبيه لـ ${allTokens.length} مستخدم');
-        _logger.i('تم إرسال التنبيه لجميع المستخدمين بنجاح');
-      }
-
-      return success;
-    } catch (e) {
-      _logger.e('خطأ في إرسال التنبيه لجميع المستخدمين: $e');
-      return false;
-    } finally {
-      isSendingNotification.value = false;
+      sentNotifications.add('تم إرسال التنبيه لـ ${allTokens.length} مستخدم');
+      _logger.i('تم إرسال التنبيه لجميع المستخدمين بنجاح');
     }
+
+    return success;
+  } catch (e) {
+    _logger.e('خطأ في إرسال التنبيه لجميع المستخدمين: $e');
+    return false;
+  } finally {
+    isSendingNotification.value = false;
   }
+}
 
   /// إرسال تنبيه لمستخدم معين
   Future<bool> sendNotificationToUser({
-    required String userId,
-    required String title,
-    required String body,
-    Map<String, dynamic>? data,
-  }) async {
-    try {
-      isSendingNotification.value = true;
+  required String userId,
+  required String title,
+  required String body,
+  Map<String, dynamic>? data,
+}) async {
+  try {
+    isSendingNotification.value = true;
 
-      // البحث عن المستخدم في كلا الكوليكشنز
-      var userDoc = await _firestore.collection('riders').doc(userId).get();
+    final doc = await _firestore.collection('users').doc(userId).get();
+    if (!doc.exists) {
+      _logger.w('لم يتم العثور على المستخدم: $userId');
+      return false;
+    }
 
-      String? userType = 'rider';
+    final fcmToken = doc.data()?['fcmToken'] as String?;
+    if (fcmToken == null || fcmToken.isEmpty) {
+      _logger.w('المستخدم لا يملك FCM token: $userId');
+      return false;
+    }
 
-      if (!userDoc.exists) {
-        userDoc = await _firestore.collection('drivers').doc(userId).get();
-        userType = 'driver';
-      }
+    final success = await _sendFCMNotification(
+      tokens: [fcmToken],
+      title: title,
+      body: body,
+      data: data,
+    );
 
-      if (!userDoc.exists) {
-        _logger.w('لم يتم العثور على المستخدم: $userId');
-        return false;
-      }
-
-      final fcmToken = userDoc.data()?['fcmToken'] as String?;
-      if (fcmToken == null || fcmToken.isEmpty) {
-        _logger.w('المستخدم لا يملك FCM token: $userId');
-        return false;
-      }
-
-      // إرسال التنبيه
-      final success = await _sendFCMNotification(
-        tokens: [fcmToken],
+    if (success) {
+      await _saveNotificationToDatabase(
+        userId: userId,
         title: title,
         body: body,
         data: data,
+        userType: doc.data()?['userType'],
       );
 
-      if (success) {
-        // حفظ التنبيه في قاعدة البيانات
-        await _saveNotificationToDatabase(
-          userId: userId,
-          title: title,
-          body: body,
-          data: data,
-          userType: userType,
-        );
-
-        sentNotifications.add('تم إرسال التنبيه للمستخدم: $userId');
-        _logger.i('تم إرسال التنبيه للمستخدم بنجاح: $userId');
-      }
-
-      return success;
-    } catch (e) {
-      _logger.e('خطأ في إرسال التنبيه للمستخدم: $e');
-      return false;
-    } finally {
-      isSendingNotification.value = false;
+      sentNotifications.add('تم إرسال التنبيه للمستخدم: $userId');
+      _logger.i('تم إرسال التنبيه للمستخدم بنجاح: $userId');
     }
+
+    return success;
+  } catch (e) {
+    _logger.e('خطأ في إرسال التنبيه للمستخدم: $e');
+    return false;
+  } finally {
+    isSendingNotification.value = false;
   }
+}
+
 
   /// إرسال تنبيه لجميع السائقين
   Future<bool> sendNotificationToAllDrivers({
@@ -171,7 +143,8 @@ class NotificationTestService extends GetxService {
       isSendingNotification.value = true;
 
       final driversSnapshot = await _firestore
-          .collection('drivers')
+           .collection('users')
+            .where('userType', isEqualTo: 'driver')
           .where('fcmToken', isNotEqualTo: null)
           .where('isActive', isEqualTo: true)
           .get();
@@ -220,7 +193,8 @@ class NotificationTestService extends GetxService {
       isSendingNotification.value = true;
 
       final ridersSnapshot = await _firestore
-          .collection('riders')
+           .collection('users')
+            .where('userType', isEqualTo: 'rider')
           .where('fcmToken', isNotEqualTo: null)
           .where('isActive', isEqualTo: true)
           .get();

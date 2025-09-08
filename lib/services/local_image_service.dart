@@ -6,14 +6,14 @@ import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_storage/get_storage.dart';
 import '../main.dart';
 
 class LocalImageService extends GetxService {
   static LocalImageService get to => Get.find();
 
   final ImagePicker _picker = ImagePicker();
-  
+
   final RxBool isUploading = false.obs;
   final RxDouble uploadProgress = 0.0.obs;
 
@@ -99,7 +99,7 @@ class LocalImageService extends GetxService {
 
       final Directory appDir = await _appDirectory;
       final Directory folderDir = Directory('${appDir.path}/$folder');
-      
+
       if (!await folderDir.exists()) {
         await folderDir.create(recursive: true);
       }
@@ -111,7 +111,7 @@ class LocalImageService extends GetxService {
       // نسخ الصورة إلى المجلد المحلي
       await imageFile.copy(filePath);
 
-      // حفظ معلومات الصورة في SharedPreferences
+      // حفظ معلومات الصورة في GetStorage
       await _saveImageInfo(filePath, folder, fileName);
 
       logger.i('تم حفظ الصورة محلياً: $filePath');
@@ -133,20 +133,21 @@ class LocalImageService extends GetxService {
   }
 
   /// حفظ معلومات الصورة
-  Future<void> _saveImageInfo(String filePath, String folder, String fileName) async {
+  Future<void> _saveImageInfo(
+      String filePath, String folder, String fileName) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String> savedImages = prefs.getStringList('saved_images') ?? [];
-      
+      final box = GetStorage();
+      final List<dynamic> savedImages = box.read('saved_images') ?? [];
+
       final Map<String, dynamic> imageInfo = {
         'path': filePath,
         'folder': folder,
         'fileName': fileName,
         'uploadedAt': DateTime.now().toIso8601String(),
       };
-      
+
       savedImages.add(json.encode(imageInfo));
-      await prefs.setStringList('saved_images', savedImages);
+      box.write('saved_images', savedImages);
     } catch (e) {
       logger.w('خطأ في حفظ معلومات الصورة: $e');
     }
@@ -184,7 +185,7 @@ class LocalImageService extends GetxService {
 
       final Directory appDir = await _appDirectory;
       final Directory folderDir = Directory('${appDir.path}/$folder');
-      
+
       if (!await folderDir.exists()) {
         await folderDir.create(recursive: true);
       }
@@ -216,10 +217,10 @@ class LocalImageService extends GetxService {
       final File file = File(imagePath);
       if (await file.exists()) {
         await file.delete();
-        
-        // حذف المعلومات من SharedPreferences
+
+        // حذف المعلومات من GetStorage
         await _removeImageInfo(imagePath);
-        
+
         logger.i('تم حذف الصورة: $imagePath');
         return true;
       }
@@ -233,15 +234,15 @@ class LocalImageService extends GetxService {
   /// حذف معلومات الصورة
   Future<void> _removeImageInfo(String imagePath) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String> savedImages = prefs.getStringList('saved_images') ?? [];
-      
+      final box = GetStorage();
+      final List<dynamic> savedImages = box.read('saved_images') ?? [];
+
       savedImages.removeWhere((imageInfo) {
         final Map<String, dynamic> info = json.decode(imageInfo);
         return info['path'] == imagePath;
       });
-      
-      await prefs.setStringList('saved_images', savedImages);
+
+      box.write('saved_images', savedImages);
     } catch (e) {
       logger.w('خطأ في حذف معلومات الصورة: $e');
     }
@@ -250,9 +251,9 @@ class LocalImageService extends GetxService {
   /// الحصول على جميع الصور المحفوظة
   Future<List<Map<String, dynamic>>> getSavedImages() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final List<String> savedImages = prefs.getStringList('saved_images') ?? [];
-      
+      final box = GetStorage();
+      final List<dynamic> savedImages = box.read('saved_images') ?? [];
+
       return savedImages.map((imageInfo) {
         return Map<String, dynamic>.from(json.decode(imageInfo));
       }).toList();
@@ -324,10 +325,10 @@ class LocalImageService extends GetxService {
       if (await appDir.exists()) {
         await appDir.delete(recursive: true);
       }
-      
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('saved_images');
-      
+
+      final box = GetStorage();
+      await box.remove('saved_images');
+
       logger.i('تم مسح جميع الصور المحفوظة');
     } catch (e) {
       logger.w('خطأ في مسح الصور: $e');

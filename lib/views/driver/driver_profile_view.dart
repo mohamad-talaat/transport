@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/routes/app_routes.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_storage/get_storage.dart';
 
 class DriverProfileView extends StatelessWidget {
   DriverProfileView({super.key});
@@ -106,10 +107,10 @@ class DriverProfileView extends StatelessWidget {
   // مسح cache التطبيق
   Future<void> _clearAppCache() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final box = GetStorage();
 
       // مسح البيانات المحفوظة
-      await prefs.clear();
+      await box.erase();
 
       Get.snackbar(
         'تم المسح',
@@ -160,21 +161,20 @@ class DriverProfileView extends StatelessWidget {
         ),
       );
     } catch (e) {
-      print('خطأ في إعادة التعيين: $e');
+      logger.w('خطأ في إعادة التعيين: $e');
     }
   }
 
   Future<void> _performReset() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final box = GetStorage();
 
       // مسح جميع البيانات المحفوظة
-      await prefs.clear();
+      await box.erase();
 
       // إعادة تحميل بيانات المستخدم من Firebase
       if (authController.currentUser.value?.id != null) {
-        await authController
-            .loadUserData(authController.currentUser.value!.id);
+        await authController.loadUserData(authController.currentUser.value!.id);
       }
 
       Get.snackbar(

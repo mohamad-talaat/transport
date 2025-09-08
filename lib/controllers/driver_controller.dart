@@ -109,7 +109,7 @@ class DriverController extends GetxController {
         return false;
       }
 
-      // التحقق من موافقة الإدارة
+        // التحقق من موافقة الإدارة (users.isApproved)
       final isApproved = await profileService.isDriverApproved(userId);
       if (!isApproved) {
         Get.snackbar(

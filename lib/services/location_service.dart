@@ -196,7 +196,7 @@ class LocationService extends GetxService {
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
 
-        return data.map((item) {
+        List<LocationSearchResult> results = data.map((item) {
           return LocationSearchResult(
             latLng: LatLng(
               double.parse(item['lat']),
@@ -209,6 +209,20 @@ class LocationService extends GetxService {
             country: item['address']?['country'] ?? 'مصر',
           );
         }).toList();
+
+        // ترتيب النتائج بحسب القرب من موقعي الحالي
+        final LatLng? me = currentLocation.value;
+        if (me != null) {
+          results.sort((a, b) {
+            final da = Geolocator.distanceBetween(me.latitude, me.longitude,
+                a.latLng.latitude, a.latLng.longitude);
+            final db = Geolocator.distanceBetween(me.latitude, me.longitude,
+                b.latLng.latitude, b.latLng.longitude);
+            return da.compareTo(db);
+          });
+        }
+
+        return results;
       }
 
       return [];

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/services/firebase_service.dart';
 import 'package:transport_app/services/driver_profile_service.dart';
 import 'package:transport_app/routes/app_routes.dart';
@@ -26,12 +27,16 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
   late Animation<double> _pulseAnimation;
   late Animation<Offset> _slideAnimation;
 
+  bool _isApproved = false;
+  bool _isProfileComplete = false;
+
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _startListeningForRequests();
     _checkProfileCompletion();
+    _refreshApprovalStatus();
   }
 
   void _initializeAnimations() {
@@ -67,14 +72,300 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
       final userId = authController.currentUser.value?.id;
       if (userId == null) return;
 
+      // التحقق من اكتمال الملف الشخصي
       final isComplete = await profileService.isProfileComplete(userId);
+
+      // التحقق من الموافقة الإدارية (اعتمد على users.isApproved)
+      final isApproved = await profileService.isDriverApproved(userId);
+
+      setState(() {
+        _isProfileComplete = isComplete;
+        _isApproved = isApproved;
+      });
+
+      // إظهار رسائل حسب الحالة
       if (!isComplete) {
-        // إذا لم يكمل البروفايل، توجيه لشاشة الإكمال
-        Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
+        Get.snackbar(
+          'ملف غير مكتمل',
+          'يرجى إكمال جميع البيانات المطلوبة في ملفك الشخصي',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
+      } else if (!isApproved) {
+        Get.snackbar(
+          'في انتظار الموافقة',
+          'حسابك قيد المراجعة من قبل الإدارة. سيتم إشعارك عند الموافقة.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.orange,
+          colorText: Colors.white,
+          duration: Duration(seconds: 4),
+        );
       }
     } catch (e) {
-      print('خطأ في التحقق من اكتمال البروفايل: $e');
+      logger.w('خطأ في التحقق من اكتمال البروفايل: $e');
     }
+  }
+
+  /// تحديث حالة الموافقة والملف الشخصي
+  Future<void> _refreshApprovalStatus() async {
+    try {
+      final userId = authController.currentUser.value?.id;
+      if (userId == null) return;
+
+      final isComplete = await profileService.isProfileComplete(userId);
+      final isApproved = await profileService.isDriverApproved(userId);
+
+      if (mounted) {
+        setState(() {
+          _isProfileComplete = isComplete;
+          _isApproved = isApproved;
+        });
+      }
+    } catch (e) {
+      logger.w('خطأ في تحديث حالة الموافقة: $e');
+    }
+  }
+
+  Widget _buildStatusCard() {
+    // تحديد الحالة والرسالة المناسبة
+    String title;
+    String message;
+    Color color;
+    IconData icon;
+
+    if (!_isProfileComplete) {
+      title = 'ملف غير مكتمل';
+      message =
+          'يرجى إكمال جميع البيانات المطلوبة في ملفك الشخصي لتتمكن من استقبال الرحلات';
+      color = Colors.red.shade600;
+      icon = Icons.person_off;
+    } else if (!_isApproved) {
+      title = 'في انتظار الموافقة';
+      message =
+          'حسابك قيد المراجعة من قبل الإدارة. سيتم إشعارك عند الموافقة لتتمكن من استقبال الرحلات';
+      color = Colors.orange.shade600;
+      icon = Icons.pending_actions;
+    } else {
+      title = 'جاهز للعمل';
+      message = 'يمكنك الآن استقبال الرحلات';
+      color = Colors.green.shade600;
+      icon = Icons.check_circle;
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            size: 48,
+            color: color,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: color.withOpacity(0.8),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withOpacity(0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: color, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'جزء البحث عن الرحلات مخفي حتى تكتمل جميع المتطلبات',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              if (!_isProfileComplete) ...[
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Get.toNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
+                    },
+                    icon: const Icon(Icons.edit),
+                    label: const Text('إكمال الملف'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red.shade600,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await _refreshApprovalStatus();
+                    Get.snackbar(
+                      'تم التحديث',
+                      'تم تحديث حالة الملف والموافقة',
+                      snackPosition: SnackPosition.BOTTOM,
+                      backgroundColor: Colors.green,
+                      colorText: Colors.white,
+                    );
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('تحديث الحالة'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingApprovalCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            Icons.pending_actions,
+            size: 48,
+            color: Colors.orange.shade600,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'في انتظار الموافقة',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.orange.shade800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'حسابك قيد المراجعة من قبل الإدارة. سيتم إشعارك عند الموافقة لتتمكن من استقبال الرحلات.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.orange.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade300),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline,
+                    color: Colors.orange.shade700, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'جزء البحث عن الرحلات مخفي حتى تتم الموافقة عليك من الإدارة',
+                    style: TextStyle(
+                      color: Colors.orange.shade800,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Get.snackbar(
+                      'معلومات',
+                      'يمكنك تحديث ملفك الشخصي في أي وقت',
+                      snackPosition: SnackPosition.BOTTOM,
+                      backgroundColor: Colors.blue,
+                      colorText: Colors.white,
+                    );
+                  },
+                  icon: const Icon(Icons.edit),
+                  label: const Text('تحديث الملف'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await _refreshApprovalStatus();
+                    Get.snackbar(
+                      'تم التحديث',
+                      'تم تحديث حالة الموافقة',
+                      snackPosition: SnackPosition.BOTTOM,
+                      backgroundColor: Colors.green,
+                      colorText: Colors.white,
+                    );
+                  },
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('تحديث الحالة'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -105,7 +396,11 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
                 const SizedBox(height: 20),
                 _buildQuickActions(),
                 const SizedBox(height: 20),
-                _buildTripRequestsSection(),
+                if (_isProfileComplete && _isApproved) ...[
+                  _buildTripRequestsSection(),
+                ] else ...[
+                  _buildStatusCard(),
+                ],
                 const SizedBox(height: 100), // مساحة للـ bottom navigation
               ],
             ),
@@ -136,85 +431,85 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-                child: Obx(() => CircleAvatar(
-                      radius: 35,
-                      backgroundImage: authController
-                                  .currentUser.value?.profileImage !=
-                              null
-                          ? NetworkImage(
-                              authController.currentUser.value!.profileImage!)
-                          : null,
-                      child:
-                          authController.currentUser.value?.profileImage == null
-                              ? const Icon(Icons.person,
-                                  size: 35, color: Colors.white)
-                              : null,
-                    )),
+          Row(children: [
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 3),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Obx(() => Text(
-                          'مرحباً، ${authController.currentUser.value?.name ?? 'السائق'}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        )),
-                    const SizedBox(height: 4),
-                    Obx(() => Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: driverController.isOnline.value
-                                    ? Colors.green
-                                    : Colors.grey,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              driverController.isOnline.value
-                                  ? 'متصل ونشط'
-                                  : 'غير متصل',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        )),
-                  ],
-                ),
-              ),
-              Row(
+              child: Obx(() => CircleAvatar(
+                    radius: 35,
+                    backgroundImage: (authController
+                                .currentUser.value?.profileImage?.isNotEmpty ??
+                            false)
+                        ? NetworkImage(
+                            authController.currentUser.value!.profileImage!)
+                        : null,
+                    child: (authController
+                                .currentUser.value?.profileImage?.isNotEmpty ??
+                            false)
+                        ? null
+                        : const Icon(Icons.person,
+                            size: 35, color: Colors.white),
+                  )),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeaderButton(
-                    icon: Icons.settings,
-                    onTap: () => Get.toNamed(AppRoutes.DRIVER_SETTINGS),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildHeaderButton(
-                    icon: Icons.logout,
-                    onTap: () => _showLogoutDialog(),
-                  ),
+                  Obx(() => Text(
+                        'مرحباً، ${authController.currentUser.value?.name ?? 'السائق'}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )),
+                  const SizedBox(height: 4),
+                  Obx(() => Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: driverController.isOnline.value
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            driverController.isOnline.value
+                                ? 'متصل ونشط'
+                                : 'غير متصل',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      )),
                 ],
               ),
-            ],
-          ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildHeaderButton(
+                  icon: Icons.settings,
+                  onTap: () => Get.toNamed(AppRoutes.DRIVER_SETTINGS),
+                ),
+                const SizedBox(width: 8),
+                _buildHeaderButton(
+                  icon: Icons.logout,
+                  onTap: () => _showLogoutDialog(),
+                ),
+              ],
+            ),
+          ]),
           const SizedBox(height: 20),
           _buildBalanceCard(),
         ],
@@ -351,24 +646,19 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
                   ],
                 ),
               ),
-              Obx(() => AnimatedBuilder(
-                    animation: _pulseAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: driverController.isOnline.value
-                            ? _pulseAnimation.value
-                            : 1.0,
-                        child: Switch(
-                          value: driverController.isOnline.value,
-                          onChanged: (value) {
-                            driverController.toggleOnlineStatus();
-                          },
-                          activeThumbColor: const Color(0xFF059669),
-                          activeTrackColor: const Color(0xFFD1FAE5),
-                        ),
-                      );
+              Obx(() {
+                return Transform.scale(
+                  scale: driverController.isOnline.value
+                      ? _pulseAnimation.value
+                      : 1.0,
+                  child: Switch(
+                    value: driverController.isOnline.value,
+                    onChanged: (value) {
+                      driverController.toggleOnlineStatus();
                     },
-                  )),
+                  ),
+                );
+              })
             ],
           ),
           if (driverController.isOnline.value) ...[
@@ -983,11 +1273,24 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
         content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
         actions: [
           TextButton(
-            onPressed: () => Get.back(),
+            onPressed: () {
+              // تجنب خطأ GetX عند عدم وجود Snackbar مُهيأ
+              if (Get.isSnackbarOpen) {
+                try {
+                  Get.closeCurrentSnackbar();
+                } catch (_) {}
+              }
+              Get.back();
+            },
             child: const Text('إلغاء'),
           ),
           ElevatedButton(
             onPressed: () {
+              if (Get.isSnackbarOpen) {
+                try {
+                  Get.closeCurrentSnackbar();
+                } catch (_) {}
+              }
               Get.back();
               authController.signOut();
             },

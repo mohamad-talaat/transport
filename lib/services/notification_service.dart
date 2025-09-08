@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:get_storage/get_storage.dart';
+ 
 import '../main.dart';
 
 class NotificationService extends GetxService {
@@ -160,26 +160,25 @@ class NotificationService extends GetxService {
     try {
       if (!notificationsEnabled.value) return;
 
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
+      AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
         'transport_app_channel',
         'تطبيق النقل',
         channelDescription: 'إشعارات تطبيق النقل',
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
-        enableVibration: true,
-        playSound: true,
+        enableVibration: vibrationEnabled.value,
+        playSound: soundEnabled.value,
         icon: '@mipmap/ic_launcher',
       );
 
-      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      final DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
-        presentSound: true,
+        presentSound: soundEnabled.value,
       );
 
-      const NotificationDetails platformDetails = NotificationDetails(
+      final NotificationDetails platformDetails = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       );
@@ -236,8 +235,8 @@ class NotificationService extends GetxService {
       logger.e('إرسال التوكن للخادم: $token');
 
       // حفظ التوكن محلياً
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('fcm_token', token);
+      final box = GetStorage();
+      box.write('fcm_token', token);
     } catch (e) {
       logger.e('خطأ في إرسال التوكن: $e');
     }
@@ -851,9 +850,11 @@ class NotificationService extends GetxService {
   /// حفظ الإشعارات
   Future<void> _saveNotifications() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+          final box = GetStorage();
+     // box.write('is_logged_in', true);
+      // final prefs = await SharedPreferences.getInstance();
       final notificationsJson = notifications.map((n) => n.toJson()).toList();
-      await prefs.setString('notifications', jsonEncode(notificationsJson));
+      await box.write('notifications', jsonEncode(notificationsJson));
     } catch (e) {
       logger.e('خطأ في حفظ الإشعارات: $e');
     }
@@ -862,8 +863,10 @@ class NotificationService extends GetxService {
   /// تحميل الإشعارات المحفوظة
   Future<void> _loadStoredNotifications() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final notificationsStr = prefs.getString('notifications');
+          final box = GetStorage();
+     // box.write('is_logged_in', true);
+      // final prefs = await SharedPreferences.getInstance();
+      final notificationsStr =  box.read('notifications');
 
       if (notificationsStr != null) {
         final List<dynamic> notificationsJson = jsonDecode(notificationsStr);
@@ -884,21 +887,22 @@ class NotificationService extends GetxService {
     bool? sound,
     bool? vibration,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
+        final box = GetStorage();
+    //  final prefs = await SharedPreferences.getInstance();
 
     if (enabled != null) {
       notificationsEnabled.value = enabled;
-      await prefs.setBool('notifications_enabled', enabled);
+      await  box.write('notifications_enabled', enabled);
     }
 
     if (sound != null) {
       soundEnabled.value = sound;
-      await prefs.setBool('notifications_sound', sound);
+      await  box.write('notifications_sound', sound);
     }
 
     if (vibration != null) {
       vibrationEnabled.value = vibration;
-      await prefs.setBool('notifications_vibration', vibration);
+      await  box.write('notifications_vibration', vibration);
     }
   }
 

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_storage/get_storage.dart';
 import '../main.dart';
 import 'image_upload_service.dart';
 import 'free_image_upload_service.dart';
@@ -60,8 +60,8 @@ class SmartImageService extends GetxService {
   /// تحميل الطريقة المفضلة
   Future<void> _loadPreferredMethod() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? methodString = prefs.getString('preferred_image_method');
+      final box = GetStorage();
+      final String? methodString = box.read('preferred_image_method');
       
       if (methodString != null) {
         currentMethod.value = ImageUploadMethod.values.firstWhere(
@@ -78,8 +78,8 @@ class SmartImageService extends GetxService {
   /// حفظ الطريقة المفضلة
   Future<void> _savePreferredMethod(ImageUploadMethod method) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('preferred_image_method', method.toString());
+      final box = GetStorage();
+      box.write('preferred_image_method', method.toString());
       currentMethod.value = method;
     } catch (e) {
       logger.w('خطأ في حفظ الطريقة المفضلة: $e');

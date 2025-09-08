@@ -48,7 +48,6 @@ import 'package:transport_app/services/image_upload_service.dart';
 import 'package:transport_app/services/mock_testing_service.dart';
 
 // Testing Views
-import 'package:transport_app/views/testing/mock_testing_view.dart';
 import 'package:transport_app/services/notification_service.dart';
 
 class AppPages {
@@ -93,11 +92,45 @@ class AppPages {
       name: AppRoutes.RIDER_SEARCHING,
       page: () {
         final args = Get.arguments as Map<String, dynamic>?;
+        final pickupArg = args?['pickup'];
+        final destinationArg = args?['destination'];
+        final estimatedFareArg = (args?['estimatedFare'] ?? 0.0) as num;
+        final estimatedDurationArg = (args?['estimatedDuration'] ?? 0) as int;
+
+        // فولباك من الرحلة النشطة لو مفيش arguments
+        final trip = Get.isRegistered<TripController>()
+            ? TripController.to.activeTrip.value
+            : null;
+        final pickup = pickupArg ?? trip?.pickupLocation;
+        final destination = destinationArg ?? trip?.destinationLocation;
+        final estimatedFare = pickupArg != null && destinationArg != null
+            ? estimatedFareArg.toDouble()
+            : (trip?.fare ?? 0.0);
+        final estimatedDuration = pickupArg != null && destinationArg != null
+            ? estimatedDurationArg
+            : (trip?.estimatedDuration ?? 0);
+
+        if (pickup == null || destination == null) {
+          Future.microtask(() {
+            Get.snackbar(
+              'بيانات غير مكتملة',
+              'يرجى اختيار نقطة الانطلاق والوجهة أولاً',
+              snackPosition: SnackPosition.BOTTOM,
+              backgroundColor: Colors.red,
+              colorText: Colors.white,
+            );
+            if (Get.currentRoute == AppRoutes.RIDER_SEARCHING) {
+              Get.offAllNamed(AppRoutes.RIDER_HOME);
+            }
+          });
+          return const RiderHomeView();
+        }
+
         return RiderSearchingView(
-          pickup: args?['pickup'],
-          destination: args?['destination'],
-          estimatedFare: args?['estimatedFare'] ?? 0.0,
-          estimatedDuration: args?['estimatedDuration'] ?? 0,
+          pickup: pickup,
+          destination: destination,
+          estimatedFare: estimatedFare.toDouble(),
+          estimatedDuration: estimatedDuration,
         );
       },
       binding: BindingsBuilder(() {
@@ -179,44 +212,39 @@ class AppPages {
       name: AppRoutes.DRIVER_EARNINGS,
       page: () => const DriverWalletView(), // نفس شاشة المحفظة مؤقتاً
     ),
+    // اجعل صفحة الملف الشخصي تفتح شاشة إكمال/تعديل الملف مباشرة
     GetPage(
       name: AppRoutes.DRIVER_PROFILE,
-      page: () => const DriverProfileView(),
-    ),
-    GetPage(
-      name: AppRoutes.DRIVER_PROFILE_EDIT,
-      page: () => const DriverProfileEditView(),
+      page: () => const DriverProfileCompletionView(),
       binding: BindingsBuilder(() {
         Get.lazyPut(() => ImageUploadService());
       }),
     ),
+    // GetPage(
+    //   name: AppRoutes.DRIVER_PROFILE_EDIT,
+    //   page: () => const DriverProfileEditView(),
+    //   binding: BindingsBuilder(() {
+    //     Get.lazyPut(() => ImageUploadService());
+    //   }),
+    // ),
     GetPage(
       name: AppRoutes.DRIVER_SETTINGS,
       page: () => const DriverSettingsView(),
     ),
 
-    // Admin Routes
-    GetPage(
-      name: AppRoutes.ADMIN_DASHBOARD,
-      page: () => const AdminDashboardView(),
-      binding: BindingsBuilder(() {
-        // AppSettingsService is already initialized in main.dart
-      }),
-    ),
+    // // Admin Routes
+    // GetPage(
+    //   name: AppRoutes.ADMIN_DASHBOARD,
+    //   page: () => const AdminDashboardView(),
+    //   binding: BindingsBuilder(() {
+    //     // AppSettingsService is already initialized in main.dart
+    //   }),
+    // ),
 
     // Settings Routes
     GetPage(
       name: AppRoutes.IMAGE_UPLOAD_SETTINGS,
       page: () => const ImageUploadSettingsView(),
-    ),
-
-    // Testing Routes
-    GetPage(
-      name: AppRoutes.MOCK_TESTING,
-      page: () => const MockTestingView(),
-      binding: BindingsBuilder(() {
-        Get.lazyPut(() => MockTestingService());
-      }),
     ),
   ];
 }
@@ -278,16 +306,16 @@ class DriverSettingsView extends StatelessWidget {
                     .updateNotificationSettings(vibration: v),
               )),
           const SizedBox(height: 24),
-          const Text('رفع الصور',
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          ListTile(
-            leading: const Icon(Icons.cloud_upload),
-            title: const Text('إعدادات رفع الصور'),
-            subtitle: const Text('اختر طريقة رفع الصور المفضلة'),
-            trailing: const Icon(Icons.arrow_forward_ios),
-            onTap: () => Get.toNamed(AppRoutes.IMAGE_UPLOAD_SETTINGS),
-          ),
+          // const Text('رفع الصور',
+          //     style: TextStyle(fontWeight: FontWeight.bold)),
+          // const SizedBox(height: 8),
+          // ListTile(
+          //   leading: const Icon(Icons.cloud_upload),
+          //   title: const Text('إعدادات رفع الصور'),
+          //   subtitle: const Text('اختر طريقة رفع الصور المفضلة'),
+          //   trailing: const Icon(Icons.arrow_forward_ios),
+          //   onTap: () => Get.toNamed(AppRoutes.IMAGE_UPLOAD_SETTINGS),
+          // ),
         ],
       ),
     );

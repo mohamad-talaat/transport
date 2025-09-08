@@ -2,8 +2,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 import 'package:logger/logger.dart';
-import 'firebase_options.dart';
 import 'package:transport_app/controllers/app_controller.dart';
 import 'package:transport_app/routes/app_pages.dart';
 import 'package:transport_app/routes/app_routes.dart';
@@ -32,13 +32,16 @@ var logger = Logger(
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize GetStorage for secure local storage
+  await GetStorage.init();
+
   // تهيئة Firebase - إصلاح مشكلة التطبيق المكرر
   try {
     // التحقق من وجود Firebase مسبقاً
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+          // options: DefaultFirebaseOptions.currentPlatform,
+          );
       logger.i('تم تهيئة Firebase بنجاح');
     } else {
       logger.i('Firebase مهيأ مسبقاً');
@@ -107,13 +110,13 @@ void _initializeRemainingServices() {
     () => Get.put(FreeImageUploadService(), permanent: true),
     () => Get.put(LocalImageService(), permanent: true),
     () => Get.put(SmartImageService(), permanent: true),
-    () => Get.put(MockTestingService(), permanent: true),
+    // () => Get.put(MockTestingService(), permanent: true),
     () => Get.put(DriverPaymentService(), permanent: true),
     () => Get.put(DriverDiscountService(), permanent: true),
     () => Get.put(FirebaseService(), permanent: true),
     () => Get.put(DriverProfileService(), permanent: true),
     () => Get.put(UserManagementService(), permanent: true),
-    () => Get.put(DiscountCodeService(), permanent: true),
+    // () => Get.put(DiscountCodeService(), permanent: true),
     () => Get.put(NotificationTestService(), permanent: true),
   ];
 
@@ -182,7 +185,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         // اللغة والتوطين
         locale: controller.currentLocale.value,
         fallbackLocale: const Locale('en', 'US'),
-
         // الصفحات والتوجيه
         initialRoute: AppRoutes.SPLASH,
         getPages: AppPages.routes,

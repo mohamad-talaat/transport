@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/models/trip_model.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
@@ -114,7 +115,7 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
         });
       }
     } catch (e) {
-      print('خطأ في حساب المسافة: $e');
+      logger.w('خطأ في حساب المسافة: $e');
     }
   }
 

@@ -19,7 +19,7 @@ class UserTypeSelectionView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             children: [
-              const SizedBox(height: 40),
+              const SizedBox(height: 20),
               _buildHeader(),
               const Spacer(),
               _buildUserOptions(),
@@ -107,6 +107,24 @@ class UserTypeSelectionView extends StatelessWidget {
           icon: Icons.apple,
           iconColor: Colors.white,
           onTap: () => _showUserTypeDialog('apple'),
+        ),
+        const SizedBox(height: 16),
+        _buildSocialButton(
+          label: 'الدخول كضيف (اختبار)',
+          color: Colors.amber.shade200,
+          textColor: Colors.black87,
+          icon: Icons.person,
+          iconColor: Colors.black87,
+          onTap: () => authController.signInAsGuest(),
+        ),
+        const SizedBox(height: 16),
+        _buildSocialButton(
+          label: 'الدخول كسائق Guest (اختبار)',
+          color: Colors.blue.shade100,
+          textColor: Colors.black87,
+          icon: Icons.directions_car,
+          iconColor: Colors.blue,
+          onTap: () => authController.signInAsGuestDriver(),
         ),
       ],
     );
@@ -204,64 +222,64 @@ class UserTypeSelectionView extends StatelessWidget {
         ),
 
         const SizedBox(height: 20),
-        GestureDetector(
-          onTap: () {
-            Get.toNamed('/admin-dashboard');
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade100,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.amber.shade300),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.admin_panel_settings,
-                    size: 18, color: Colors.amber.shade700),
-                const SizedBox(width: 8),
-                Text(
-                  'داشبورد الإدارة',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.amber.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        // GestureDetector(
+        //   onTap: () {
+        //     Get.toNamed('/admin-dashboard');
+        //   },
+        //   child: Container(
+        //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        //     decoration: BoxDecoration(
+        //       color: Colors.amber.shade100,
+        //       borderRadius: BorderRadius.circular(20),
+        //       border: Border.all(color: Colors.amber.shade300),
+        //     ),
+        //     child: Row(
+        //       mainAxisSize: MainAxisSize.min,
+        //       children: [
+        //         Icon(Icons.admin_panel_settings,
+        //             size: 18, color: Colors.amber.shade700),
+        //         const SizedBox(width: 8),
+        //         Text(
+        //           'داشبورد الإدارة',
+        //           style: TextStyle(
+        //             fontSize: 14,
+        //             color: Colors.amber.shade700,
+        //             fontWeight: FontWeight.w600,
+        //           ),
+        //         ),
+        //       ],
+        //     ),
+        //   ),
+        // ),
         const SizedBox(height: 12),
-        GestureDetector(
-          onTap: () {
-            Get.toNamed('/mock-testing');
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade100,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.blue.shade300),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.science, size: 18, color: Colors.blue.shade700),
-                const SizedBox(width: 8),
-                Text(
-                  'اختبار وهمي - العراق',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.blue.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        // GestureDetector(
+        //   onTap: () {
+        //     Get.toNamed('/mock-testing');
+        //   },
+        //   child: Container(
+        //     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        //     decoration: BoxDecoration(
+        //       color: Colors.blue.shade100,
+        //       borderRadius: BorderRadius.circular(20),
+        //       border: Border.all(color: Colors.blue.shade300),
+        //     ),
+        //     child: Row(
+        //       mainAxisSize: MainAxisSize.min,
+        //       children: [
+        //         Icon(Icons.science, size: 18, color: Colors.blue.shade700),
+        //         const SizedBox(width: 8),
+        //         Text(
+        //           'اختبار وهمي - العراق',
+        //           style: TextStyle(
+        //             fontSize: 14,
+        //             color: Colors.blue.shade700,
+        //             fontWeight: FontWeight.w600,
+        //           ),
+        //         ),
+        //       ],
+        //     ),
+        //   ),
+        // ),
 
         // const SizedBox(height: 20),
         // GestureDetector(
@@ -318,7 +336,7 @@ class UserTypeSelectionView extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Get.back(),
+            onPressed: () => Get.back(closeOverlays: false),
             child: const Text('إلغاء'),
           ),
         ],
@@ -336,7 +354,7 @@ class UserTypeSelectionView extends StatelessWidget {
   ) {
     return GestureDetector(
       onTap: () async {
-        Get.back();
+        Get.back(closeOverlays: false);
         final bool canProceed =
             await authController.selectUserTypeForSocialLogin(userType);
         if (!canProceed) return;

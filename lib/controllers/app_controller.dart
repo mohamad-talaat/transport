@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transport_app/main.dart';
+import 'package:get_storage/get_storage.dart';
+ import 'package:transport_app/main.dart';
 import 'package:transport_app/services/location_service.dart';
 import 'package:transport_app/services/notification_service.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
@@ -71,14 +71,14 @@ class AppController extends GetxController {
   /// تحميل إعدادات التطبيق
   Future<void> _loadAppSettings() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final box = GetStorage();
       
       // تحميل الإعدادات
-      isDarkMode.value = prefs.getBool('dark_mode') ?? false;
-      currentLanguage.value = prefs.getString('language') ?? 'ar';
-      soundsEnabled.value = prefs.getBool('sounds_enabled') ?? true;
-      vibrationsEnabled.value = prefs.getBool('vibrations_enabled') ?? true;
-      notificationsEnabled.value = prefs.getBool('notifications_enabled') ?? true;
+      isDarkMode.value = box.read('dark_mode') ?? false;
+      currentLanguage.value = box.read('language') ?? 'ar';
+      soundsEnabled.value = box.read('sounds_enabled') ?? true;
+      vibrationsEnabled.value = box.read('vibrations_enabled') ?? true;
+      notificationsEnabled.value = box.read('notifications_enabled') ?? true;
       
       // تطبيق اللغة
       if (currentLanguage.value == 'ar') {
@@ -204,8 +204,8 @@ void _onConnectivityChanged(ConnectivityResult result) {
       _applyTheme();
       
       // حفظ الإعداد
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('dark_mode', isDarkMode.value);
+      final box = GetStorage();
+      box.write('dark_mode', isDarkMode.value);
       
       // إشعار المستخدم
       Get.snackbar(
@@ -251,8 +251,8 @@ void _onConnectivityChanged(ConnectivityResult result) {
       }
       
       // حفظ الإعداد
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('language', languageCode);
+      final box = GetStorage();
+      box.write('language', languageCode);
       
       Get.snackbar(
         languageCode == 'ar' ? 'تم تغيير اللغة' : 'Language Changed',
@@ -273,21 +273,21 @@ void _onConnectivityChanged(ConnectivityResult result) {
     bool? notifications,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final box = GetStorage();
       
       if (sounds != null) {
         soundsEnabled.value = sounds;
-        await prefs.setBool('sounds_enabled', sounds);
+        box.write('sounds_enabled', sounds);
       }
       
       if (vibrations != null) {
         vibrationsEnabled.value = vibrations;
-        await prefs.setBool('vibrations_enabled', vibrations);
+        box.write('vibrations_enabled', vibrations);
       }
       
       if (notifications != null) {
         notificationsEnabled.value = notifications;
-        await prefs.setBool('notifications_enabled', notifications);
+        box.write('notifications_enabled', notifications);
         
         // تحديث خدمة الإشعارات
         await NotificationService.to.updateNotificationSettings(
@@ -616,8 +616,8 @@ void _onConnectivityChanged(ConnectivityResult result) {
       }
       
       // مسح البيانات المحفوظة
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      final box = GetStorage();
+      await box.erase();
       
       // إعادة تحميل الإعدادات الافتراضية
       await _loadAppSettings();

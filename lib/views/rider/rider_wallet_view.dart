@@ -41,6 +41,18 @@ class RiderWalletView extends StatelessWidget {
 
               const SizedBox(height: 24),
 
+              // تحذير الرصيد المنخفض
+              Obx(() {
+                final balance =
+                    authController.currentUser.value?.balance ?? 0.0;
+                if (balance < 10.0) {
+                  return _buildLowBalanceWarning();
+                }
+                return const SizedBox.shrink();
+              }),
+
+              const SizedBox(height: 24),
+
               // أزرار الإجراءات
               _buildActionButtons(),
 
@@ -51,6 +63,90 @@ class RiderWalletView extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// تحذير الرصيد المنخفض
+  Widget _buildLowBalanceWarning() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.orange.shade50,
+            Colors.orange.shade100,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade200, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange.shade700,
+              size: 28,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'رصيدك منخفض!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'برجاء شحن حسابك بالرصيد لتتمكن من طلب الرحلات',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton(
+            onPressed: () => _showAddBalanceDialog(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange.shade600,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+            child: const Text(
+              'شحن الآن',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -653,77 +749,93 @@ class RiderWalletView extends StatelessWidget {
     final voucherController = TextEditingController();
     final walletController = Get.find<WalletController>();
 
+    const fixedWhatsappNumber = '+201013280650'; // الرقم ثابت
+
     Get.dialog(
       Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.confirmation_number,
-                size: 60,
-                color: Colors.blue,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'كود الشحن',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+              // أيقونة في الأعلى
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.confirmation_number_outlined,
+                  size: 40,
+                  color: Colors.blue,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              const Text(
+                'إدخال كود الشحن',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // حقل الكود
               TextField(
                 controller: voucherController,
                 decoration: InputDecoration(
-                  labelText: 'أدخل كود الشحن',
                   hintText: 'مثال: ABC123XYZ',
+                  hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  prefixIcon: const Icon(Icons.confirmation_number),
                 ),
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 18,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   letterSpacing: 2,
                 ),
-                inputFormatters: [
-                  UpperCaseTextFormatter(),
-                ],
+                inputFormatters: [UpperCaseTextFormatter()],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // زر طلب كود جديد
+              // زر واتساب ثابت
               OutlinedButton.icon(
-                onPressed: () => _requestNewVoucher(),
-                icon: const Icon(Icons.wechat_sharp, color: Colors.green),
-                label: const Text('طلب كود جديد عبر واتساب'),
+                onPressed: () => _openWhatsAppChat(fixedWhatsappNumber),
+                icon: const Icon(Icons.chat_outlined, color: Colors.green),
+                label: const Text('طلب كود عبر واتساب'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.green,
                   side: const BorderSide(color: Colors.green),
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
+              const SizedBox(height: 16),
 
-              const SizedBox(height: 20),
-
+              // الأزرار السفلية
               Row(
                 children: [
                   Expanded(
                     child: TextButton(
                       onPressed: () => Get.back(),
-                      child: const Text('إلغاء'),
+                      child: const Text(
+                        'إلغاء',
+                        style: TextStyle(fontSize: 15, color: Colors.grey),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Obx(() => ElevatedButton(
                           onPressed: walletController.isLoading.value
@@ -736,11 +848,15 @@ class RiderWalletView extends StatelessWidget {
                                   }
                                 },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 2), // 👈 قللت البادينج الأفقي
+
+                            backgroundColor:
+                                const Color.fromARGB(255, 198, 243, 33),
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size.fromHeight(48),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           child: walletController.isLoading.value
@@ -753,7 +869,13 @@ class RiderWalletView extends StatelessWidget {
                                         AlwaysStoppedAnimation(Colors.white),
                                   ),
                                 )
-                              : const Text('استخدام الكود'),
+                              : const Text(
+                                  'استخدام الكود',
+                                  softWrap: false, // يمنع الكسر لسطر جديد
+                                  overflow: TextOverflow
+                                      .ellipsis, // لو طويل يجيب "..."
+                                  style: TextStyle(fontSize: 14),
+                                ),
                         )),
                   ),
                 ],
@@ -765,37 +887,40 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// طلب كود شحن جديد
-  void _requestNewVoucher() async {
-    const phoneNumber = '+201013280650'; // رقم واتساب الدعم
-    const message = 'مرحباً، أريد طلب كود شحن جديد للمحفظة الإلكترونية';
+  /// فتح محادثة واتساب مباشرة مع رقم مُدخل
+  void _openWhatsAppChat(String rawPhone) async {
+    String phoneNumber = rawPhone.replaceAll(' ', '');
 
+    // لازم تشيل علامة +
+    if (phoneNumber.startsWith('+')) {
+      phoneNumber = phoneNumber.substring(1);
+    }
+
+    const message = 'مرحباً، أريد طلب كود شحن جديد للمحفظة الإلكترونية';
     final url = Uri.parse(
-        'https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}');
+      'https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}',
+    );
 
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
-        // نسخ الرقم للحافظة
-        await Clipboard.setData(const ClipboardData(text: phoneNumber));
         Get.snackbar(
-          'تم نسخ الرقم',
-          'تم نسخ رقم الواتساب: $phoneNumber',
+          'لا يمكن فتح واتساب',
+          'تحقق من تثبيت واتساب على جهازك',
           snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
+          backgroundColor: Colors.orange,
           colorText: Colors.white,
         );
       }
     } catch (e) {
       Get.snackbar(
         'خطأ',
-        'تعذر فتح واتساب. تم نسخ الرقم: $phoneNumber',
+        'تعذر فتح واتساب، حاول مرة أخرى',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.orange,
         colorText: Colors.white,
       );
-      await Clipboard.setData(const ClipboardData(text: phoneNumber));
     }
   }
 }

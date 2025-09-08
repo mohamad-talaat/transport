@@ -146,7 +146,7 @@ class DriverProfileService extends GetxService {
 
       return true;
     } catch (e) {
-      print('خطأ في التحقق من اكتمال بروفايل السائق: $e');
+      logger.w('خطأ في التحقق من اكتمال بروفايل السائق: $e');
       return false;
     }
   }
@@ -164,7 +164,7 @@ class DriverProfileService extends GetxService {
       // التحقق من أن السائق موافق عليه من الإدارة
       return userData['isApproved'] == true;
     } catch (e) {
-      print('خطأ في التحقق من موافقة الإدارة: $e');
+      logger.w('خطأ في التحقق من موافقة الإدارة: $e');
       return false;
     }
   }
@@ -219,7 +219,7 @@ class DriverProfileService extends GetxService {
 
       return missingFields;
     } catch (e) {
-      print('خطأ في الحصول على الحقول الناقصة: $e');
+      logger.w('خطأ في الحصول على الحقول الناقصة: $e');
       return [];
     }
   }
@@ -272,7 +272,7 @@ class DriverProfileService extends GetxService {
 
       return (completedFields / requiredFields.length) * 100;
     } catch (e) {
-      print('خطأ في حساب نسبة اكتمال البروفايل: $e');
+      logger.w('خطأ في حساب نسبة اكتمال البروفايل: $e');
       return 0.0;
     }
   }
@@ -375,7 +375,7 @@ class DriverProfileService extends GetxService {
 
       await _firestore.collection('users').doc(userId).update(data);
     } catch (e) {
-      print('خطأ في تحديث بيانات البروفايل: $e');
+      logger.w('خطأ في تحديث بيانات البروفايل: $e');
       rethrow;
     }
   }
@@ -390,7 +390,7 @@ class DriverProfileService extends GetxService {
         'rejectionReason': null,
       });
     } catch (e) {
-      print('خطأ في تحديث حالة اكتمال البروفايل: $e');
+      logger.w('خطأ في تحديث حالة اكتمال البروفايل: $e');
       rethrow;
     }
   }
@@ -408,7 +408,7 @@ class DriverProfileService extends GetxService {
       });
       return true;
     } catch (e) {
-      print('خطأ في الموافقة على السائق: $e');
+      logger.w('خطأ في الموافقة على السائق: $e');
       return false;
     }
   }
@@ -427,7 +427,7 @@ class DriverProfileService extends GetxService {
       });
       return true;
     } catch (e) {
-      print('خطأ في رفض السائق: $e');
+      logger.w('خطأ في رفض السائق: $e');
       return false;
     }
   }
@@ -444,11 +444,9 @@ class DriverProfileService extends GetxService {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => doc.data())
-          .toList();
+      return querySnapshot.docs.map((doc) => doc.data()).toList();
     } catch (e) {
-      print('خطأ في جلب السائقين في الانتظار: $e');
+      logger.w('خطأ في جلب السائقين في الانتظار: $e');
       return [];
     }
   }
@@ -464,11 +462,9 @@ class DriverProfileService extends GetxService {
           .orderBy('approvedAt', descending: true)
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => doc.data())
-          .toList();
+      return querySnapshot.docs.map((doc) => doc.data()).toList();
     } catch (e) {
-      print('خطأ في جلب السائقين الموافق عليهم: $e');
+      logger.w('خطأ في جلب السائقين الموافق عليهم: $e');
       return [];
     }
   }
@@ -484,11 +480,9 @@ class DriverProfileService extends GetxService {
           .orderBy('rejectedAt', descending: true)
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => doc.data())
-          .toList();
+      return querySnapshot.docs.map((doc) => doc.data()).toList();
     } catch (e) {
-      print('خطأ في جلب السائقين المرفوضين: $e');
+      logger.w('خطأ في جلب السائقين المرفوضين: $e');
       return [];
     }
   }
@@ -520,7 +514,7 @@ class DriverProfileService extends GetxService {
           userData['isApproved'] == true &&
           userData['isProfileComplete'] == true;
     } catch (e) {
-      print('خطأ في التحقق من إمكانية استقبال الطلبات: $e');
+      logger.w('خطأ في التحقق من إمكانية استقبال الطلبات: $e');
       return false;
     }
   }

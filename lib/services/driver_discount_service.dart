@@ -120,7 +120,7 @@ class DriverDiscountService extends GetxService {
       // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
         _authController.currentUser.value!.balance =
-            (_authController.currentUser.value!.balance ?? 0.0) +
+            _authController.currentUser.value!.balance +
                 discountCode.discountAmount;
         _authController.currentUser.refresh();
       }

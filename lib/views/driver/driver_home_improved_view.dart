@@ -25,7 +25,6 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
   late AnimationController _pulseController;
   late AnimationController _slideController;
   late Animation<double> _pulseAnimation;
-  late Animation<Offset> _slideAnimation;
 
   bool _isApproved = false;
   bool _isProfileComplete = false;
@@ -52,10 +51,6 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 1),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     _pulseController.repeat(reverse: true);
   }
@@ -238,116 +233,6 @@ class _DriverHomeImprovedViewState extends State<DriverHomeImprovedView>
                     Get.snackbar(
                       'تم التحديث',
                       'تم تحديث حالة الملف والموافقة',
-                      snackPosition: SnackPosition.BOTTOM,
-                      backgroundColor: Colors.green,
-                      colorText: Colors.white,
-                    );
-                  },
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('تحديث الحالة'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPendingApprovalCard() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.pending_actions,
-            size: 48,
-            color: Colors.orange.shade600,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'في انتظار الموافقة',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.orange.shade800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'حسابك قيد المراجعة من قبل الإدارة. سيتم إشعارك عند الموافقة لتتمكن من استقبال الرحلات.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.orange.shade700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade100,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.shade300),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline,
-                    color: Colors.orange.shade700, size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'جزء البحث عن الرحلات مخفي حتى تتم الموافقة عليك من الإدارة',
-                    style: TextStyle(
-                      color: Colors.orange.shade800,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Get.snackbar(
-                      'معلومات',
-                      'يمكنك تحديث ملفك الشخصي في أي وقت',
-                      snackPosition: SnackPosition.BOTTOM,
-                      backgroundColor: Colors.blue,
-                      colorText: Colors.white,
-                    );
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: const Text('تحديث الملف'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange.shade600,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    await _refreshApprovalStatus();
-                    Get.snackbar(
-                      'تم التحديث',
-                      'تم تحديث حالة الموافقة',
                       snackPosition: SnackPosition.BOTTOM,
                       backgroundColor: Colors.green,
                       colorText: Colors.white,

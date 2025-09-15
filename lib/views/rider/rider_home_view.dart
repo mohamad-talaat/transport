@@ -1,18 +1,23 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
-import 'package:transport_app/controllers/map_controller.dart';
+import 'package:transport_app/controllers/map_controller.dart'
+    hide EnhancedPinWidget;
 import 'package:transport_app/controllers/trip_controller.dart';
-import 'package:get_storage/get_storage.dart';
 import 'package:transport_app/main.dart';
-
 import 'package:transport_app/models/trip_model.dart';
-import 'package:transport_app/views/rider/rider_drawer_view.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
+// import 'package:transport_app/views/rider/rider_widgets/animated_balance.dart';
+// import 'package:transport_app/views/rider/rider_widgets/arabic_name.dart';
+import 'package:transport_app/views/rider/rider_widgets/drawer.dart';
+import 'package:transport_app/views/rider/rider_widgets/pin_painter.dart';
+import 'package:transport_app/views/rider/rider_widgets/top_search_bar.dart';
 
 class RiderHomeView extends StatefulWidget {
   const RiderHomeView({super.key});
@@ -29,42 +34,37 @@ class _RiderHomeViewState extends State<RiderHomeView>
       Get.put(MapControllerr(), permanent: true);
   final TripController tripController = Get.find<TripController>();
 
-  bool _hasOpenedDestinationSheetOnce = false;
+  // Booking state
+  final RxBool isRoundTrip = false.obs;
+  final RxInt waitingTime = 0.obs;
+  final RxDouble baseFare = 0.0.obs;
+  final RxDouble totalFare = 0.0.obs;
+  final RxString paymentMethod = 'cash'.obs; // 'cash' or 'app'
+  bool _isDisposed = false;
+
+  // Bottom Sheet Control
+  final RxBool shouldShowBottomSheet = false.obs;
+
+  // Animations
   late AnimationController _slideController;
-  late AnimationController _fadeController;
+  late AnimationController _priceAnimationController;
   late Animation<Offset> _slideAnimation;
-  late Animation<double> _fadeAnimation;
+  late Animation<double> _priceAnimation;
+
+  final DraggableScrollableController _bottomSheetController =
+      DraggableScrollableController();
+
+  // Iraqi Dinar exchange rate
+  final double iqd_exchange_rate = 1500.0;
 
   @override
   void initState() {
     super.initState();
-    _loadDestinationSheetFlag();
+
     _initializeAnimations();
-
-    // إضافة Listener للـ selectedLocation لتحديث الخريطة فوراً
     _setupLocationListeners();
-  }
-
-  void _setupLocationListeners() {
-    // عند تغيير الموقع المختار، ارسم المسار فوراً
-    ever(mapController.selectedLocation, (LatLng? location) {
-      if (location != null) {
-        _fetchAndDrawRouteAsync();
-      }
-    });
-
-    // عند تغيير الموقع الحالي، ارسم المسار مرة أخرى
-    ever(mapController.currentLocation, (LatLng? location) {
-      if (location != null && mapController.selectedLocation.value != null) {
-        _fetchAndDrawRouteAsync();
-      }
-    });
-  }
-
-  String _formatSeconds(int totalSeconds) {
-    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+    _checkUserProfile();
+    _setupBottomSheetControl();
   }
 
   void _initializeAnimations() {
@@ -73,8 +73,8 @@ class _RiderHomeViewState extends State<RiderHomeView>
       vsync: this,
     );
 
-    _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 400),
+    _priceAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     );
 
@@ -86,99 +86,430 @@ class _RiderHomeViewState extends State<RiderHomeView>
       curve: Curves.easeOut,
     ));
 
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
+    _priceAnimation = Tween<double>(
+      begin: 1.0,
+      end: 1.1,
     ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeIn,
+      parent: _priceAnimationController,
+      curve: Curves.elasticOut,
     ));
 
-    _slideController.forward();
-    _fadeController.forward();
+    // Don't show bottom sheet initially
+    // _slideController.forward();
+  }
+
+  void _setupBottomSheetControl() {
+    // Show bottom sheet only when both pickup and destination are confirmed
+    ever(mapController.isPickupConfirmed, (bool confirmed) {
+      _updateBottomSheetVisibility();
+    });
+
+    ever(mapController.isDestinationConfirmed, (bool confirmed) {
+      _updateBottomSheetVisibility();
+    });
+
+    // Hide bottom sheet when selecting additional stops
+    ever(mapController.currentStep, (String step) {
+      if (step == 'additional_stop') {
+        _hideBottomSheetForSelection();
+      } else if (step == 'none' &&
+          mapController.isPickupConfirmed.value &&
+          mapController.isDestinationConfirmed.value) {
+        _showBottomSheetAfterSelection();
+      }
+    });
+  }
+
+  void _updateBottomSheetVisibility() {
+    if (_isDisposed) return;
+
+    bool shouldShow = mapController.isPickupConfirmed.value &&
+        mapController.isDestinationConfirmed.value;
+
+    if (shouldShow && !shouldShowBottomSheet.value) {
+      shouldShowBottomSheet.value = true;
+      _slideController.forward();
+      _calculateFare();
+    } else if (!shouldShow && shouldShowBottomSheet.value) {
+      shouldShowBottomSheet.value = false;
+      _slideController.reverse();
+    }
+  }
+
+  void _hideBottomSheetForSelection() {
+    if (_isDisposed || !shouldShowBottomSheet.value) return;
+
+    try {
+      _bottomSheetController.animateTo(
+        0.0, // fully collapse during selection
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } catch (e) {
+      // Ignore if disposed
+    }
+  }
+
+  void _showBottomSheetAfterSelection() {
+    if (_isDisposed || !shouldShowBottomSheet.value) return;
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!_isDisposed && shouldShowBottomSheet.value) {
+        try {
+          _bottomSheetController.animateTo(
+            0.35,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        } catch (e) {
+          // Ignore if disposed
+        }
+      }
+    });
+  }
+
+  void _setupLocationListeners() {
+    ever(mapController.isPickupConfirmed, (bool confirmed) {
+      if (!_isDisposed && confirmed) _calculateFare();
+    });
+
+    ever(mapController.isDestinationConfirmed, (bool confirmed) {
+      if (!_isDisposed && confirmed) _calculateFare();
+    });
+
+    ever(mapController.selectedLocation, (LatLng? location) {
+      if (!_isDisposed &&
+          location != null &&
+          mapController.currentLocation.value != null) {
+        _calculateFare();
+      }
+    });
+
+    // إضافة listener للمحطات الإضافية مع تحديث واجهة المستخدم
+    ever(mapController.additionalStops, (List<AdditionalStop> stops) {
+      if (!_isDisposed) {
+        _calculateFare();
+        // فرض إعادة بناء الواجهة لضمان ظهور/إخفاء الزر
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isDisposed) {
+            setState(() {}); // إجبار الـ Widget على إعادة البناء
+          }
+        });
+      }
+    });
+  }
+
+  void _checkUserProfile() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final user = authController.currentUser.value;
+      if (user != null) {
+        final bool missingName = ((user.name).trim().isEmpty);
+        final bool missingPhone = ((user.phone).trim().isEmpty);
+        if (missingName || missingPhone) {
+          Get.toNamed(AppRoutes.RIDER_PROFILE_COMPLETION);
+        }
+      }
+    });
+  }
+
+  void _calculateFare() {
+    if (_isDisposed ||
+        mapController.currentLocation.value == null ||
+        mapController.selectedLocation.value == null) return;
+
+    final from = mapController.currentLocation.value!;
+    final to = mapController.selectedLocation.value!;
+    final distanceKm = LocationService.to.calculateDistance(from, to);
+
+    // Base fare calculation (in USD, then convert to IQD)
+    double fareUSD = 2.0 + (distanceKm * 0.8);
+
+    // Additional stops (these are additional destinations, not pickup points)
+    fareUSD += mapController.additionalStops.length * 1.5;
+
+    // Waiting time
+    fareUSD += waitingTime.value * 0.2;
+
+    // Round trip
+    if (isRoundTrip.value) {
+      fareUSD *= 1.8;
+    }
+
+    baseFare.value = fareUSD * iqd_exchange_rate;
+    totalFare.value = baseFare.value;
+
+    _animatePriceChange();
+  }
+
+  void _animatePriceChange() {
+    if (_isDisposed) return;
+
+    try {
+      _priceAnimationController.reset();
+      _priceAnimationController.forward();
+    } catch (e) {
+      // Ignore animation errors if controller is disposed
+    }
   }
 
   @override
   void dispose() {
-    _slideController.dispose();
-    _fadeController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadDestinationSheetFlag() async {
+    _isDisposed = true;
+    // إيقاف اللودينج قبل التخلص من الكونترولر
     try {
-      final box = GetStorage();
-      _hasOpenedDestinationSheetOnce =
-          box.read('rider_opened_destination_once') ?? false;
+      mapController.isLoading.value = false;
+    } catch (e) {
+      // Ignore if already disposed
+    }
+    try {
+      _slideController.dispose();
+    } catch (e) {
+      // Ignore disposal errors
+    }
 
-      if (!_hasOpenedDestinationSheetOnce &&
-          !tripController.hasActiveTrip.value) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _showDestinationBottomSheet();
-          box.write('rider_opened_destination_once', true);
-          _hasOpenedDestinationSheetOnce = true;
-        });
-      }
-    } catch (_) {}
+    try {
+      _priceAnimationController.dispose();
+    } catch (e) {
+      // Ignore disposal errors
+    }
+
+    try {
+      _bottomSheetController.dispose();
+    } catch (e) {
+      // Ignore disposal errors
+    }
+
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: _onWillPop,
-        child: Scaffold(
-          key: _scaffoldKey,
-          drawer: _buildDrawer(),
-          body: Stack(
-            children: [
-              _buildMap(), // إزالة Obx من هنا
-              _buildTopSearchBar(context),
-              _buildUserInfoHeader(),
-              _buildBalanceCard(),
-              _buildSideControls(),
-              _buildSearchResults(),
-              _buildBottomTripCard(),
-              _buildLoadingOverlay(),
-            ],
-          ),
-        ));
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        key: _scaffoldKey,
+        drawer: RiderDrawer(authController: authController),
+        body: Stack(
+          children: [
+            _buildOptimizedMap(),
+            _buildEnhancedCenterPin(),
+            const ExpandableSearchBar(),
+            const SearchResultsOverlay(),
+            _buildSelectionCancelButton(),
+
+            _buildBalanceDisplay(),
+            _buildSideControls(),
+            _buildLocationConfirmationSection(),
+            // Only show bottom sheet when both locations are confirmed
+            Obx(() {
+              if (shouldShowBottomSheet.value) {
+                return _buildEnhancedBottomSheet();
+              }
+              return const SizedBox.shrink();
+            }),
+            _buildLoadingOverlay(),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<bool> _onWillPop() async {
-    bool shouldExit = false;
-    await Get.dialog(
-      AlertDialog(
-        title: const Text('تأكيد الخروج'),
-        content: const Text('هل تريد الخروج من التطبيق؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: const Text('لا'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              shouldExit = true;
-              Get.back();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('نعم'),
-          ),
-        ],
-      ),
-      barrierDismissible: true,
-    );
-
-    if (shouldExit) {
-      SystemNavigator.pop();
-      return false;
+    // إيقاف أي عملية لودينج جارية
+    if (mapController.isLoading.value) {
+      mapController.isLoading.value = false;
     }
-    return false;
+
+    // تحقق من حالة الشاشة الحالية
+    if (mapController.currentStep.value != 'none') {
+      mapController.currentStep.value = 'none';
+      mapController.showConfirmButton.value = false;
+      _showBottomSheetAfterSelection();
+      return false; // لا تخرج من التطبيق
+    }
+
+    // إذا كان الـ BottomSheet مفتوح، اخفه
+    if (shouldShowBottomSheet.value) {
+      try {
+        _bottomSheetController.animateTo(
+          0.20,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
+        return false; // لا تخرج من التطبيق
+      } catch (e) {
+        // في حالة خطأ، اعرض dialog التأكيد
+      }
+    }
+
+    // في كل الحالات الأخرى، اعرض dialog التأكيد
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade100,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.exit_to_app,
+                        color: Colors.orange.shade600, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'الخروج من التطبيق',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: const Text(
+                'هل تريد الخروج من التطبيق؟\nستفقد أي بيانات رحلة غير محفوظة.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.black54,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              actions: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        child: Text(
+                          'لا، البقاء',
+                          style: TextStyle(
+                            color: Colors.grey.shade700,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          // إيقاف اللودينج قبل الخروج
+                          mapController.isLoading.value = false;
+                          Navigator.of(context).pop(true);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade400,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'نعم، خروج',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
-  Widget _buildMap() {
+  // Enhanced Balance Display with better styling
+  Widget _buildBalanceDisplay() {
+    return Positioned(
+      top: 110,
+      right: 10,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.orange.shade400, Colors.orange.shade600],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.account_balance_wallet,
+                color: Colors.orange.shade600,
+                size: 14,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'رصيدك',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Obx(() => Text(
+                      '${((authController.currentUser.value?.balance ?? 0.0) * iqd_exchange_rate).toStringAsFixed(0)} د.ع',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOptimizedMap() {
     return Obx(() => FlutterMap(
           mapController: mapController.mapController,
           options: MapOptions(
@@ -189,14 +520,25 @@ class _RiderHomeViewState extends State<RiderHomeView>
             interactionOptions: const InteractionOptions(
               flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
             ),
-            onTap: (tapPosition, point) => _onMapTap(point),
-            onLongPress: (tapPosition, point) => _onMapLongPress(point),
+            onPositionChanged: (camera, hasGesture) {
+              if (hasGesture) {
+                final distance = LocationService.to.calculateDistance(
+                  mapController.mapCenter.value,
+                  camera.center,
+                );
+                if (distance > 0.01) {
+                  mapController.mapCenter.value = camera.center;
+                  mapController.mapZoom.value = camera.zoom;
+                }
+              }
+            },
           ),
           children: [
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.example.transport_app',
               maxZoom: 19,
+              maxNativeZoom: 18,
             ),
             CircleLayer(circles: mapController.circles),
             PolylineLayer(polylines: mapController.polylines),
@@ -205,226 +547,26 @@ class _RiderHomeViewState extends State<RiderHomeView>
         ));
   }
 
-  Widget _buildTopSearchBar(BuildContext context) {
-    return Positioned(
-      top: MediaQuery.of(context).padding.top + 16,
-      left: 16,
-      right: 16,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(28),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 16,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Builder(
-                builder: (ctx) => Container(
-                  margin: const EdgeInsets.only(left: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 10,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.menu, color: Colors.black54),
-                    onPressed: () => Scaffold.of(ctx).openDrawer(),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: Obx(() => TextField(
-                      controller: mapController.searchController,
-                      textDirection: TextDirection.rtl,
-                      decoration: InputDecoration(
-                        hintText: mapController.selectedAddress.value.isNotEmpty
-                            ? mapController.selectedAddress.value
-                            : 'إلى أين تريد الذهاب؟',
-                        hintStyle: TextStyle(
-                          color: mapController.selectedAddress.value.isNotEmpty
-                              ? Colors.black87
-                              : Colors.grey,
-                          fontWeight:
-                              mapController.selectedAddress.value.isNotEmpty
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                        ),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 16),
-                      ),
-                      onTap: () {
-                        mapController.clearSearch();
-                        _showDestinationBottomSheet();
-                      },
-                      onChanged: (value) {
-                        if (value.isNotEmpty) {
-                          mapController.searchLocation(value);
-                        } else {
-                          mapController.searchResults.clear();
-                        }
-                      },
-                    )),
-              ),
-              Obx(() => Container(
-                    margin: const EdgeInsets.only(right: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.shade400,
-                      shape: BoxShape.circle,
-                    ),
-                    child: mapController.isSearching.value
-                        ? const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                          )
-                        : IconButton(
-                            icon: const Icon(Icons.search, color: Colors.white),
-                            onPressed: () {
-                              if (!mounted) return; // يمنع الكراش
-                              String query =
-                                  mapController.searchController.text;
-                              if (query.isNotEmpty) {
-                                mapController.searchLocation(query);
-                              } else {
-                                _showDestinationBottomSheet();
-                              }
-                            },
-                          ),
-                  )),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildUserInfoHeader() {
-    return Positioned(
-        top: MediaQuery.of(context).padding.top + 80,
-        left: 10,
-        child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Container(
-                    padding: const EdgeInsets.all(1),
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundImage: authController
-                                  .currentUser.value?.profileImage !=
-                              null
-                          ? NetworkImage(
-                              authController.currentUser.value!.profileImage!)
-                          : null,
-                      child:
-                          authController.currentUser.value?.profileImage == null
-                              ? const Icon(Icons.person,
-                                  size: 15, color: Colors.white)
-                              : null,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'مرحباً ${authController.currentUser.value?.name ?? 'مستخدم'}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        TextButton(
-                          child: Text(
-                            'إلى أين تريد الذهاب؟',
-                            style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 13,
-                            ),
-                          ),
-                          onPressed: () => _showDestinationBottomSheet(),
-                        )
-                      ])
-                ]))));
-  }
-
-  Widget _buildLoadingOverlay() {
+  Widget _buildEnhancedCenterPin() {
     return Obx(() {
-      final bool showOverlay = mapController.isLoading.value;
-      if (!showOverlay) return const SizedBox.shrink();
+      if (mapController.currentStep.value == 'none') {
+        return const SizedBox.shrink();
+      }
 
-      return Container(
-        color: Colors.black.withOpacity(0.25),
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: CircularProgressIndicator(color: Colors.orange),
-                ),
-                SizedBox(height: 16),
-                Text(
-                  'جاري التحميل...',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+      return Positioned(
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          child: Center(
+            child: EnhancedPinWidget(
+              color: _getStepColor(mapController.currentStep.value),
+              label: _getStepText(mapController.currentStep.value),
+              isMoving: mapController.isMapMoving.value,
+              showLabel: false,
+              size: 32,
+              zoomLevel: mapController.mapZoom.value,
             ),
           ),
         ),
@@ -432,709 +574,79 @@ class _RiderHomeViewState extends State<RiderHomeView>
     });
   }
 
-  Widget _buildDrawer() {
-    return Drawer(
-      child: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange.shade400, Colors.orange.shade600],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+  // Top-right cancel (X) while selecting additional stops only
+  Widget _buildSelectionCancelButton() {
+    return Obx(() {
+      // إظهار زر X فقط عند اختيار نقاط إضافية
+      if (mapController.currentStep.value != 'additional_stop')
+        return const SizedBox.shrink();
+      return Positioned(
+        top: 115, // MediaQuery.of(context).padding.top + 8,
+        left: 20,
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundImage:
-                        authController.currentUser.value?.profileImage != null
-                            ? NetworkImage(
-                                authController.currentUser.value!.profileImage!)
-                            : null,
-                    child:
-                        authController.currentUser.value?.profileImage == null
-                            ? const Icon(Icons.person,
-                                size: 30, color: Colors.white)
-                            : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          authController.currentUser.value?.name ?? 'مستخدم',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          authController.currentUser.value?.phone ?? '',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                children: [
-                  _buildDrawerItem(
-                    icon: Icons.person_outline,
-                    title: 'الملف الشخصي',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_PROFILE);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.history,
-                    title: 'تاريخ الرحلات',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_TRIP_HISTORY);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.account_balance_wallet_outlined,
-                    title: 'المحفظة',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_WALLET);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.notifications_outlined,
-                    title: 'الإشعارات',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_NOTIFICATIONS);
-                    },
-                  ),
-                  const Divider(height: 32),
-                  _buildDrawerItem(
-                    icon: Icons.settings_outlined,
-                    title: 'الإعدادات',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_SETTINGS);
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.help_outline,
-                    title: 'المساعدة والدعم',
-                    onTap: () {
-                      Get.back();
-                      // Handle help
-                    },
-                  ),
-                  _buildDrawerItem(
-                    icon: Icons.info_outline,
-                    title: 'عن التطبيق',
-                    onTap: () {
-                      Get.back();
-                      Get.toNamed(AppRoutes.RIDER_ABOUT);
-                    },
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListTile(
-                leading: Icon(Icons.logout, color: Colors.red.shade400),
-                title: Text(
-                  'تسجيل الخروج',
-                  style: TextStyle(
-                    color: Colors.red.shade400,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                onTap: () {
-                  Get.back();
-                  _showLogoutDialog();
-                },
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                tileColor: Colors.red.shade50,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Icon(icon, color: Colors.grey.shade600),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w500,
-          fontSize: 15,
-        ),
-      ),
-      onTap: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-      ),
-    );
-  }
-
-  void _onMapTap(LatLng point) async {
-    // اختيار الموقع من الخريطة مع التحديث الفوري
-    await mapController.selectLocationFromMap(point);
-    if (!mounted) return; // يمنع الكراش
-
-    // إغلاق لوحة المفاتيح إن كانت مفتوحة
-    FocusScope.of(context).unfocus();
-
-    // إغلاق نتائج البحث
-    mapController.searchResults.clear();
-  }
-
-  void _onMapLongPress(LatLng point) {
-    mapController.setMiddleStopFromMap(point, title: 'محطة وسطى');
-  }
-
-  // دالة لرسم المسار بشكل غير متزامن لتجنب البطء
-  Future<void> _fetchAndDrawRouteAsync() async {
-    if (mapController.currentLocation.value == null ||
-        mapController.selectedLocation.value == null) {
-      return;
-    }
-
-    // استخدام compute لتنفيذ العملية في isolate منفصل
-    try {
-      mapController.isLoading.value = true;
-
-      final bool hasMiddle = mapController.middleStopLocation.value != null;
-
-      // تحقق أن المحطة الوسطى بين البداية والنهاية تقريبياً (على طول المسار)
-      if (hasMiddle) {
-        final from = mapController.currentLocation.value!;
-        final mid = mapController.middleStopLocation.value!;
-        final to = mapController.selectedLocation.value!;
-        final total = LocationService.to.calculateDistance(from, to);
-        final d1 = LocationService.to.calculateDistance(from, mid);
-        final d2 = LocationService.to.calculateDistance(mid, to);
-        if (d1 + d2 > total * 1.3) {
-          Get.snackbar(
-            'محطة غير صالحة',
-            'المحطة الوسطى يجب أن تكون بين موقعك والوجهة.',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: Colors.red,
-            colorText: Colors.white,
-          );
-          return;
-        }
-      }
-
-      if (hasMiddle) {
-        final List<LatLng> route =
-            await LocationService.to.getRouteWithWaypoint(
-          mapController.currentLocation.value!,
-          mapController.middleStopLocation.value!,
-          mapController.selectedLocation.value!,
-        );
-        // ابحث عن أقرب نقطة للـ waypoint لتقسيم المسار بين مقطعين بلونين مختلفين
-        final waypoint = mapController.middleStopLocation.value!;
-        int splitAt = _findClosestIndex(route, waypoint);
-        mapController.drawTripRoute(route, splitIndices: [splitAt]);
-      } else {
-        final List<LatLng> route = await LocationService.to.getRoute(
-          mapController.currentLocation.value!,
-          mapController.selectedLocation.value!,
-        );
-        mapController.drawTripRoute(route);
-      }
-    } catch (e) {
-      logger.w('Error drawing route: $e');
-    } finally {
-      mapController.isLoading.value = false;
-    }
-  }
-
-  int _findClosestIndex(List<LatLng> route, LatLng target) {
-    double best = double.infinity;
-    int idx = 0;
-    for (int i = 0; i < route.length; i++) {
-      final dLat = route[i].latitude - target.latitude;
-      final dLng = route[i].longitude - target.longitude;
-      final dist = (dLat * dLat) + (dLng * dLng);
-      if (dist < best) {
-        best = dist;
-        idx = i;
-      }
-    }
-    return idx;
-  }
-
-  void _showDestinationBottomSheet() {
-    Get.bottomSheet(
-      Container(
-        height: Get.height * 0.8,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Text(
-                    'إلى أين تريد الذهاب؟',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: TextField(
-                      autofocus: true,
-                      textDirection: TextDirection.rtl,
-                      decoration: const InputDecoration(
-                        hintText: 'ابحث عن الوجهة...',
-                        prefixIcon: Icon(Icons.search, color: Colors.grey),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                      ),
-                      onChanged: (value) => mapController.searchLocation(value),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Obx(() => ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: mapController.searchResults.length,
-                    itemBuilder: (context, index) {
-                      final result = mapController.searchResults[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.location_on,
-                              color: Colors.red.shade400,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            result.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(
-                            result.address,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () async {
-                            mapController.selectLocationFromSearch(result);
-                            Get.back();
-                          },
-                        ),
-                      );
-                    },
-                  )),
-            ),
-          ],
-        ),
-      ),
-      isScrollControlled: true,
-      ignoreSafeArea: false,
-    );
-  }
-
-  void _showMiddleStopBottomSheet() {
-    Get.bottomSheet(
-      Container(
-        height: Get.height * 0.6,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade100,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.add_location_alt,
-                          color: Colors.orange.shade600,
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'إضافة محطة وسطى',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: TextField(
-                      controller: mapController.middleStopController,
-                      autofocus: true,
-                      textDirection: TextDirection.rtl,
-                      decoration: const InputDecoration(
-                        hintText: 'ابحث عن المحطة الوسطى...',
-                        prefixIcon: Icon(Icons.search, color: Colors.grey),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(16),
-                      ),
-                      onChanged: (value) => mapController.searchLocation(value),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Obx(() => ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: mapController.searchResults.length,
-                    itemBuilder: (context, index) {
-                      final result = mapController.searchResults[index];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: ListTile(
-                          leading: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade50,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.add_location_alt,
-                              color: Colors.orange.shade400,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            result.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(
-                            result.address,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () async {
-                            // تعيين المحطة الوسطى وإعادة رسم المسار
-                            mapController.setMiddleStopFromSearch(result);
-                            await _fetchAndDrawRouteAsync();
-                            Get.back();
-                            Get.snackbar(
-                              'تم إضافة المحطة',
-                              'تم إضافة ${result.name} كمحطة وسطى',
-                              snackPosition: SnackPosition.BOTTOM,
-                              backgroundColor: Colors.green,
-                              colorText: Colors.white,
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  )),
-            ),
-          ],
-        ),
-      ),
-      isScrollControlled: true,
-    );
-  }
-
-  Future<void> _requestTrip() async {
-    if (mapController.currentLocation.value == null ||
-        mapController.selectedLocation.value == null) {
-      Get.snackbar(
-        'خطأ',
-        'يرجى تحديد نقطة البداية والوجهة',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
-      return;
-    }
-
-    // Build pickup and destination points
-    final pickupLatLng = mapController.currentLocation.value!;
-    final destLatLng = mapController.selectedLocation.value!;
-
-    String pickupAddress = mapController.currentAddress.value;
-    if (pickupAddress.isEmpty) {
-      pickupAddress =
-          await LocationService.to.getAddressFromLocation(pickupLatLng);
-    }
-
-    String destinationAddress = mapController.selectedAddress.value;
-    if (destinationAddress.isEmpty) {
-      destinationAddress =
-          await LocationService.to.getAddressFromLocation(destLatLng);
-    }
-
-    final pickup = LocationPoint(
-        lat: pickupLatLng.latitude,
-        lng: pickupLatLng.longitude,
-        address: pickupAddress);
-    final destination = LocationPoint(
-        lat: destLatLng.latitude,
-        lng: destLatLng.longitude,
-        address: destinationAddress);
-
-    await tripController.requestTrip(pickup: pickup, destination: destination);
-
-    // الانتقال يتم داخل TripController.requestTrip
-  }
-
-  void _showDriverSearching() {
-    Get.to(
-      () => const DriverSearchingView(),
-      transition: Transition.upToDown,
-      duration: const Duration(milliseconds: 300),
-    );
-  }
-
-  void _showLogoutDialog() {
-    Get.dialog(
-      AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        title: const Text(
-          'تسجيل الخروج',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text(
-              'إلغاء',
-              style: TextStyle(color: Colors.grey.shade600),
-            ),
+            ],
           ),
-          ElevatedButton(
+          child: IconButton(
+            icon: const Icon(Icons.close, color: Colors.black87),
             onPressed: () {
-              Get.back();
-              authController.signOut();
+              mapController.currentStep.value = 'none';
+              mapController.showConfirmButton.value = false;
+              _showBottomSheetAfterSelection();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade400,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text('تسجيل الخروج'),
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    });
   }
 
-  Color _getTripStatusColor(TripStatus status) {
-    switch (status) {
-      case TripStatus.pending:
-        return Colors.orange;
-      case TripStatus.accepted:
-        return Colors.blue;
-      case TripStatus.driverArrived:
-        return Colors.green;
-      case TripStatus.inProgress:
-        return Colors.purple;
-      case TripStatus.completed:
-        return Colors.green;
-      case TripStatus.cancelled:
-        return Colors.red;
+  Color _getStepColor(String step) {
+    switch (step) {
+      case 'pickup':
+        return Colors.black; // Pickup pin and label in black
+      case 'destination':
+        return const Color(0xFFE53E3E); // Modern red
+      case 'additional_stop':
+        return const Color(0xFFFF8C00); // Modern orange
+      default:
+        return const Color(0xFF2196F3); // Modern blue
     }
   }
 
-  Widget _buildBalanceCard() {
-    return Positioned(
-      top: MediaQuery.of(Get.context!).padding.top + 80,
-      right: 16,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Obx(() => GestureDetector(
-              onTap: () => Get.toNamed(AppRoutes.RIDER_WALLET),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.orange.shade400, Colors.orange.shade600],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.orange.withOpacity(0.25),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.account_balance_wallet,
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${(authController.currentUser.value?.balance ?? 0.0).toStringAsFixed(2)} ج.م',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )),
-      ),
-    );
+  String _getStepText(String step) {
+    switch (step) {
+      case 'pickup':
+        return 'انطلاق';
+      case 'destination':
+        return 'وصول 1';
+      case 'additional_stop':
+        // وصول 2، وصول 3 حسب عدد المحطات الحالية
+        return 'وصول ${mapController.additionalStops.length + 2}';
+      default:
+        return 'اختر الموقع';
+    }
   }
 
   Widget _buildSideControls() {
     return Positioned(
       right: 16,
-      top: MediaQuery.of(Get.context!).size.height / 2 - 80,
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Column(
-          children: [
-            _buildControlButton(
-              icon: Icons.my_location,
-              color: Colors.blue,
-              onPressed: () => mapController.refreshCurrentLocation(),
-            ),
-            const SizedBox(height: 12),
-            _buildControlButton(
-              icon: Icons.zoom_in,
-              color: Colors.grey.shade600,
-              onPressed: () {
-                double newZoom = mapController.mapZoom.value + 1;
-                if (newZoom <= 18) {
-                  mapController.mapController.move(
-                    mapController.mapCenter.value,
-                    newZoom,
-                  );
-                  mapController.mapZoom.value = newZoom;
-                }
-              },
-            ),
-            const SizedBox(height: 8),
-            _buildControlButton(
-              icon: Icons.zoom_out,
-              color: Colors.grey.shade600,
-              onPressed: () {
-                double newZoom = mapController.mapZoom.value - 1;
-                if (newZoom >= 5) {
-                  mapController.mapController.move(
-                    mapController.mapCenter.value,
-                    newZoom,
-                  );
-                  mapController.mapZoom.value = newZoom;
-                }
-              },
-            ),
-          ],
-        ),
+      top: MediaQuery.of(context).size.height / 2 - 30,
+      child: Column(
+        children: [
+          _buildControlButton(
+            icon: Icons.my_location,
+            color: Colors.blue.shade600,
+            onPressed: () => mapController.refreshCurrentLocation(),
+          ),
+        ],
       ),
     );
   }
@@ -1145,6 +657,7 @@ class _RiderHomeViewState extends State<RiderHomeView>
     required VoidCallback onPressed,
   }) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
@@ -1152,43 +665,211 @@ class _RiderHomeViewState extends State<RiderHomeView>
           BoxShadow(
             color: Colors.black.withOpacity(0.1),
             blurRadius: 8,
-            offset: const Offset(0, 2),
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: IconButton(
+        iconSize: 22,
         icon: Icon(icon, color: color),
         onPressed: onPressed,
       ),
     );
   }
 
-  Widget _buildBottomTripCard() {
+  // Enhanced location confirmation section showing real address
+  Widget _buildLocationConfirmationSection() {
+    return Obx(() {
+      // إبقاء القسم ثابتاً ومرئياً طالما نحن في وضع اختيار موقع
+      if (mapController.currentStep.value == 'none') {
+        return const SizedBox.shrink();
+      }
+
+      return Positioned(
+        bottom: 10,
+        left: 16,
+        right: 16,
+        child: Column(
+          children: [
+            // Current address display with real-time updates
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: _getStepColor(mapController.currentStep.value)
+                              .withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _getStepIcon(mapController.currentStep.value),
+                          color: _getStepColor(mapController.currentStep.value),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _getStepText(mapController.currentStep.value),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            // Real-time address display
+                            Obx(() {
+                              String displayAddress =
+                                  mapController.currentPinAddress.value;
+                              if (displayAddress.isEmpty) {
+                                displayAddress = mapController.isMapMoving.value
+                                    ? 'جارٍ تحديد الموقع...'
+                                    : 'موقعك الحالي على الخريطة';
+                              }
+                              return Text(
+                                displayAddress,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            }),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Confirm button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: mapController.showConfirmButton.value
+                    ? _confirmCurrentLocation
+                    : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      _getStepColor(mapController.currentStep.value),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 4,
+                  shadowColor: _getStepColor(mapController.currentStep.value)
+                      .withOpacity(0.3),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Icon(Icons.check_circle_outline, size: 20),
+                    // const SizedBox(width: 8),
+                    Text(
+                      mapController.showConfirmButton.value
+                          ? 'تثبيت ${_getStepText(mapController.currentStep.value)}'
+                          : 'جاري تحديد الموقع...',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  IconData _getStepIcon(String step) {
+    switch (step) {
+      case 'pickup':
+        return Icons.trip_origin;
+      case 'destination':
+        return Icons.location_on;
+      case 'additional_stop':
+        return Icons.add_location_alt;
+      default:
+        return Icons.place;
+    }
+  }
+
+  Future<void> _confirmCurrentLocation() async {
+    if (_isDisposed) return;
+
+    // إضافة timeout لمنع اللودينج المستمر
+    try {
+      await mapController.confirmPinLocation().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          if (!_isDisposed) {
+            mapController.isLoading.value = false;
+            _showError('انتهت مهلة العملية، يرجى المحاولة مرة أخرى');
+          }
+          throw TimeoutException('Pin confirmation timeout');
+        },
+      );
+
+      if (_isDisposed) return;
+
+      // The bottom sheet visibility will be handled by the listeners
+    } catch (e) {
+      if (!_isDisposed) {
+        mapController.isLoading.value = false;
+        logger.w('خطأ في تأكيد الموقع: $e');
+      }
+    }
+  }
+
+  Widget _buildEnhancedBottomSheet() {
     return Positioned(
       bottom: 0,
       left: 0,
       right: 0,
+      top: 0,
       child: SlideTransition(
         position: _slideAnimation,
-        child: Obx(() {
-          if (tripController.hasActiveTrip.value) {
-            return _buildActiveTripCard();
-          } else {
-            return SizedBox(
-              height: Get.height * 0.5, // صغرت الكارت عشان الخريطة تبان أكتر
-              child: buildRequestTripSheet(),
-            );
-          }
-        }),
+        child: _buildProgressiveBookingSheet(),
       ),
     );
   }
 
-  Widget buildRequestTripSheet() {
+  Widget _buildProgressiveBookingSheet() {
     return DraggableScrollableSheet(
-      initialChildSize: 0.5, // يبدأ من 50% من الشاشة
-      minChildSize: 0.3, // أصغر حجم 30%
-      maxChildSize: 0.95, // يتمدد لحد 95%
+      controller: _bottomSheetController,
+      initialChildSize: 0.35,
+      minChildSize: 0.0, // collapse fully during selection
+      maxChildSize: 0.9,
       expand: false,
       builder: (context, scrollController) {
         return Container(
@@ -1198,273 +879,56 @@ class _RiderHomeViewState extends State<RiderHomeView>
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.08),
-                blurRadius: 24,
+                blurRadius: 12,
                 offset: const Offset(0, -8),
               ),
             ],
           ),
           child: ListView(
-            controller: scrollController, // مهم علشان يدعم السحب
-            padding: const EdgeInsets.all(24),
+            controller: scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
             children: [
-              // مقبض صغير فوق
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-
-              const Text(
-                'تفاصيل الرحلة',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // من (الموقع الحالي)
-              Obx(() => _buildLocationRow(
-                    icon: Icons.radio_button_checked,
-                    color: Colors.green,
-                    title: 'من',
-                    subtitle: mapController.currentAddress.value.isNotEmpty
-                        ? mapController.currentAddress.value
-                        : 'الموقع الحالي',
-                  )),
-
-              // محطة وسطى
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 28),
-                    Container(
-                        width: 2, height: 40, color: Colors.grey.shade300),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _showMiddleStopBottomSheet(),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.orange.shade200,
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add_location_alt,
-                                  color: Colors.orange.shade600, size: 16),
-                              const SizedBox(width: 8),
-                              Text(
-                                'إضافة محطة وسطى',
-                                style: TextStyle(
-                                  color: Colors.orange.shade700,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // الوجهة
-              Obx(() => _buildLocationRow(
-                    icon: Icons.location_on,
-                    color: Colors.red,
-                    title: 'إلى',
-                    subtitle: mapController.selectedAddress.value.isNotEmpty
-                        ? mapController.selectedAddress.value
-                        : 'اختر الوجهة',
-                    onTap: () => _showDestinationBottomSheet(),
-                  )),
-
-              // تفاصيل المسافة / الوقت / التكلفة
+              _buildHandle(),
+              const SizedBox(height: 8),
+              _buildHeaderSection(),
               const SizedBox(height: 16),
+              _buildLocationInputSection(),
+              const SizedBox(height: 16),
+              // Always show additional stops section when available
               Obx(() {
-                if (mapController.selectedLocation.value != null) {
-                  final from = mapController.currentLocation.value;
-                  final to = mapController.selectedLocation.value;
-                  if (from == null || to == null) {
-                    return const SizedBox.shrink();
-                  }
-
-                  final distanceKm =
-                      LocationService.to.calculateDistance(from, to);
-                  final durationMin =
-                      LocationService.to.estimateDuration(distanceKm);
-                  final fare = 10.0 + (distanceKm * 3.0);
-
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildTripInfo(
-                          icon: Icons.access_time,
-                          label: 'المدة المتوقعة',
-                          value: '$durationMin دقيقة',
-                          color: Colors.blue,
-                        ),
-                        Container(
-                            width: 1, height: 32, color: Colors.grey.shade300),
-                        _buildTripInfo(
-                          icon: Icons.straighten,
-                          label: 'المسافة',
-                          value: '${distanceKm.toStringAsFixed(1)} كم',
-                          color: Colors.green,
-                        ),
-                        Container(
-                            width: 1, height: 32, color: Colors.grey.shade300),
-                        _buildTripInfo(
-                          icon: Icons.payments,
-                          label: 'التكلفة',
-                          value: '${fare.toStringAsFixed(2)} ج.م',
-                          color: Colors.orange,
-                        ),
-                      ],
-                    ),
+                if (mapController.additionalStops.isNotEmpty) {
+                  return Column(
+                    children: [
+                      _buildAdditionalStopsDisplaySection(),
+                      const SizedBox(height: 16),
+                    ],
                   );
                 }
                 return const SizedBox.shrink();
               }),
-
-              const SizedBox(height: 24),
-
-              // زر تأكيد الرحلة + زر إلغاء أثناء العدّاد
               Obx(() {
-                final bool isLoading = tripController.isRequestingTrip.value;
-                final int remaining =
-                    tripController.remainingSearchSeconds.value;
-                final bool isWaiting = remaining > 0;
-
-                if (isWaiting) {
-                  return SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        if (Get.isSnackbarOpen == true) {
-                          try {
-                            Get.closeCurrentSnackbar();
-                          } catch (_) {}
-                        }
-                        Get.dialog(
-                          AlertDialog(
-                            title: const Text('إلغاء الطلب'),
-                            content: const Text(
-                                'هل تريد إلغاء الرحلة أثناء البحث عن سائق؟'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Get.back(),
-                                child: const Text('لا'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () async {
-                                  Get.back();
-                                  await tripController.cancelTrip();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: const Text('نعم، إلغاء'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange.shade400,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.timer, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'يرجى الانتظار ${_formatSeconds(remaining)}',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                if (baseFare.value > 0) {
+                  return Column(
+                    children: [
+                      _buildTripOptionsSection(),
+                    ],
                   );
                 }
-
-                return SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      if (mapController.selectedLocation.value == null) return;
-                      if (tripController.isRequestingTrip.value)
-                        return; // ✅ حماية إضافية
-                      await _requestTrip();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange.shade400,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation(Colors.white),
-                            ),
-                          )
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.local_taxi, size: 20),
-                              SizedBox(width: 8),
-                              Text(
-                                'تأكيد الطلب',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                );
+                return const SizedBox.shrink();
+              }),
+              Obx(() {
+                if (totalFare.value > 0) {
+                  return Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      _buildFareDisplay(),
+                      const SizedBox(height: 16),
+                      _buildBookButton(),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                }
+                return const SizedBox(height: 24);
               }),
             ],
           ),
@@ -1473,48 +937,346 @@ class _RiderHomeViewState extends State<RiderHomeView>
     );
   }
 
-  Widget _buildLocationRow({
+  Widget _buildHandle() {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade300,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection() {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.directions_car,
+            color: Colors.orange.shade600,
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'تفاصيل الرحلة',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            Text(
+              'اختر نقاط الانطلاق والوصول',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLocationInputSection() {
+    return Obx(() => Column(
+          children: [
+            // Main pickup location
+            _buildLocationInputField(
+              icon: Icons.trip_origin,
+              iconColor: const Color(0xFF4CAF50),
+              label: 'انطلاق',
+              value: mapController.isPickupConfirmed.value
+                  ? (mapController.currentAddress.value.isNotEmpty
+                      ? mapController.currentAddress.value
+                      : 'الموقع الحالي')
+                  : 'اختر نقطة الانطلاق',
+              isSet: mapController.isPickupConfirmed.value,
+              onTap: () => mapController.startLocationSelection('pickup'),
+              onRemove: mapController.isPickupConfirmed.value
+                  ? () => _removePickupLocation()
+                  : null,
+            ),
+
+            // Line connector
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  const SizedBox(width: 28),
+                  Container(width: 2, height: 15, color: Colors.grey.shade300),
+                ],
+              ),
+            ),
+
+            // Main destination location
+            _buildLocationInputField(
+              icon: Icons.location_on,
+              iconColor: const Color(0xFFE53E3E),
+              label: 'وصول',
+              value: mapController.isDestinationConfirmed.value
+                  ? (mapController.selectedAddress.value.isNotEmpty
+                      ? mapController.selectedAddress.value
+                      : 'تم تحديد الوجهة')
+                  : 'اختر نقطة الوصول الرئيسية',
+              isSet: mapController.isDestinationConfirmed.value,
+              onTap: () => mapController.startLocationSelection('destination'),
+              onRemove: mapController.isDestinationConfirmed.value
+                  ? () => _removeDestinationLocation()
+                  : null,
+            ),
+
+            // Add additional destination button - مع مراقبة التغييرات
+            if (mapController.additionalStops.length <
+                    mapController.maxAdditionalStops.value &&
+                mapController.isPickupConfirmed.value &&
+                mapController.isDestinationConfirmed.value) ...[
+              const SizedBox(height: 8),
+              _buildAddDestinationButton(),
+            ] else if (mapController.additionalStops.length >=
+                mapController.maxAdditionalStops.value) ...[
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.grey.shade600, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'تم الوصول للحد الأقصى (${mapController.maxAdditionalStops.value} وجهات)',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ));
+  }
+
+  // Updated: Build additional stops display section
+  Widget _buildAdditionalStopsDisplaySection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.add_location_alt,
+                color: Colors.orange.shade600, size: 18),
+            const SizedBox(width: 8),
+            const Text(
+              'وجهات إضافية',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Obx(() => Column(
+              children:
+                  mapController.additionalStops.asMap().entries.map((entry) {
+                int index = entry.key;
+                AdditionalStop stop = entry.value;
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade600,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${index + 2}', // وصول 2, وصول 3, etc.
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'وصول ${index + 2}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              stop.address,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.black87,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close,
+                            size: 18, color: Colors.red.shade400),
+                        onPressed: () =>
+                            mapController.removeAdditionalStop(stop.id),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            )),
+      ],
+    );
+  }
+
+   void _removePickupLocation() {
+    mapController.isPickupConfirmed.value = false;
+    mapController.currentAddress.value = '';
+    mapController.markers
+        .removeWhere((marker) => marker.key == const Key('pickup'));
+
+    // لا تحذف باقي النقاط - فقط امسح الـ polylines
+    mapController.polylines.clear();
+
+    // تحقق من وجود نقطة وصول قبل إجبار المستخدم على اختيارها
+    if (mapController.isDestinationConfirmed.value) {
+      // إذا كان هناك وصول محدد، ابدأ اختيار نقطة انطلاق جديدة
+      mapController.startLocationSelection('pickup');
+    } else {
+      // إذا لم يكن هناك وصول، ابدأ اختيار نقطة انطلاق جديدة
+      mapController.startLocationSelection('pickup');
+    }
+
+    // أعد حساب التكلفة
+    _calculateFare();
+  }
+
+  void _removeDestinationLocation() {
+    mapController.isDestinationConfirmed.value = false;
+    mapController.selectedLocation.value = null;
+    mapController.selectedAddress.value = '';
+    mapController.markers
+        .removeWhere((marker) => marker.key == const Key('destination'));
+    mapController.polylines.clear();
+
+    // إخفاء الـ BottomSheet
+    _hideBottomSheetForSelection();
+
+    // الانتقال لموقع قريب من الانطلاق بدلاً من موقع بعيد
+    if (mapController.currentLocation.value != null) {
+      // اجعل الخريطة تتحرك لموقع قريب من نقطة الانطلاق
+      final pickup = mapController.currentLocation.value!;
+      final nearbyLocation = LatLng(
+        pickup.latitude + 0.003, // مسافة قصيرة جداً (حوالي 300 متر)
+        pickup.longitude + 0.003,
+      );
+      mapController.moveToLocation(nearbyLocation, zoom: 15.0);
+    }
+
+    // ابدأ اختيار نقطة وصول جديدة فوراً
+    mapController.startLocationSelection('destination');
+
+    // أعد حساب التكلفة
+    _calculateFare();
+  }
+
+  Widget _buildLocationInputField({
     required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    VoidCallback? onTap,
+    required Color iconColor,
+    required String label,
+    required String value,
+    required bool isSet,
+    required VoidCallback onTap,
+    VoidCallback? onRemove,
   }) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        onTap();
+        _hideBottomSheetForSelection();
+      },
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         child: Row(
           children: [
             Container(
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
+                color: iconColor.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: iconColor, size: 20),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    title,
+                    label,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.grey[600],
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                    value,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSet ? FontWeight.w600 : FontWeight.w400,
+                      color: isSet ? Colors.black87 : Colors.grey,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -1522,665 +1284,740 @@ class _RiderHomeViewState extends State<RiderHomeView>
                 ],
               ),
             ),
-            if (onTap != null)
+            if (onRemove != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: Colors.red.shade400,
+                  ),
+                ),
+              ),
+            ] else if (isSet) ...[
+              const SizedBox(width: 8),
+              Icon(
+                Icons.check_circle,
+                color: iconColor,
+                size: 20,
+              ),
+            ] else ...[
+              const SizedBox(width: 8),
               Icon(
                 Icons.edit_location_alt,
                 color: Colors.grey[400],
                 size: 20,
               ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildTripInfo({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
+  Widget _buildAddDestinationButton() {
+    return GestureDetector(
+      onTap: () {
+        mapController.startLocationSelection('additional_stop');
+        _hideBottomSheetForSelection();
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade200, width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_location_alt,
+                color: Colors.orange.shade600, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'إضافة وصول ${mapController.additionalStops.length + 2}',
+              style: TextStyle(
+                color: Colors.orange.shade700,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripOptionsSection() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(6),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 16),
+        Row(
+          children: [
+            Icon(Icons.tune, color: Colors.grey.shade600, size: 18),
+            const SizedBox(width: 8),
+            const Text(
+              'خيارات الرحلة',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 6),
-        Text(
-          label,
+        const SizedBox(height: 16),
+        _buildTripTypeSection(),
+        const SizedBox(height: 16),
+        _buildWaitingTimeSection(),
+        const SizedBox(height: 16),
+        _buildPaymentMethodSection(),
+      ],
+    );
+  }
+
+  Widget _buildPaymentMethodSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'طريقة الدفع',
           style: TextStyle(
-            fontSize: 10,
-            color: Colors.grey[600],
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
             color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Obx(() => GestureDetector(
+                      onTap: () => paymentMethod.value = 'cash',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: paymentMethod.value == 'cash'
+                              ? Colors.orange.shade400
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.payments,
+                              size: 16,
+                              color: paymentMethod.value == 'cash'
+                                  ? Colors.white
+                                  : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'نقدي',
+                              style: TextStyle(
+                                color: paymentMethod.value == 'cash'
+                                    ? Colors.white
+                                    : Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+              ),
+              Expanded(
+                child: Obx(() => GestureDetector(
+                      onTap: () => paymentMethod.value = 'app',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: paymentMethod.value == 'app'
+                              ? Colors.orange.shade400
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.account_balance_wallet,
+                              size: 16,
+                              color: paymentMethod.value == 'app'
+                                  ? Colors.white
+                                  : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'عن طريق التطبيق',
+                              style: TextStyle(
+                                color: paymentMethod.value == 'app'
+                                    ? Colors.white
+                                    : Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActiveTripCard() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 24,
-            offset: const Offset(0, -8),
-          ),
-        ],
-      ),
-      child: Obx(() {
-        final trip = tripController.activeTrip.value;
-        if (trip == null) return const SizedBox.shrink();
-
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: _getTripStatusColor(trip.status).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                trip.statusText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _getTripStatusColor(trip.status),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildTripInfo(
-                    icon: Icons.access_time,
-                    label: 'المدة',
-                    value: '${trip.estimatedDuration} دقيقة',
-                    color: Colors.blue,
-                  ),
-                  Container(
-                    width: 1,
-                    height: 40,
-                    color: Colors.grey.shade300,
-                  ),
-                  _buildTripInfo(
-                    icon: Icons.straighten,
-                    label: 'المسافة',
-                    value: '${trip.distance.toStringAsFixed(1)} كم',
-                    color: Colors.green,
-                  ),
-                  Container(
-                    width: 1,
-                    height: 40,
-                    color: Colors.grey.shade300,
-                  ),
-                  _buildTripInfo(
-                    icon: Icons.payments,
-                    label: 'التكلفة',
-                    value: '${trip.fare.toStringAsFixed(2)} ج.م',
-                    color: Colors.orange,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                if (trip.status == TripStatus.pending) ...[
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => tripController.cancelTrip(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade400,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text(
-                        'إلغاء الرحلة',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-                if (trip.status != TripStatus.pending) ...[
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _showDriverSearching(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue.shade400,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: const Text(
-                        'تتبع الرحلة',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        );
-      }),
-    );
-  }
-
-  Widget _buildSearchResults() {
-    return Obx(() {
-      if (mapController.searchResults.isEmpty) {
-        return const SizedBox.shrink();
-      }
-      return Positioned(
-          top: MediaQuery.of(Get.context!).padding.top + 80,
-          left: 16,
-          right: 16,
-          child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Container(
-                  constraints: const BoxConstraints(maxHeight: 300),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: mapController.searchResults.length,
-                      itemBuilder: (context, index) {
-                        final result = mapController.searchResults[index];
-                        return ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade50,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.location_on,
-                                color: Colors.red.shade400,
-                                size: 16,
-                              ),
-                            ),
-                            title: Text(
-                              result.name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                            subtitle: Text(result.address,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.grey[600],
-                                )),
-                            onTap: () async {
-                              mapController.selectLocationFromSearch(result);
-                            });
-                      }))));
-    });
-  }
-}
-
-// Driver Searching View
-class DriverSearchingView extends StatefulWidget {
-  const DriverSearchingView({super.key});
-
-  @override
-  State<DriverSearchingView> createState() => _DriverSearchingViewState();
-}
-
-class _DriverSearchingViewState extends State<DriverSearchingView>
-    with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _dotsController;
-  late Animation<double> _pulseAnimation;
-  final AuthController authController = Get.find<AuthController>();
-  final MapControllerr mapController = Get.put(MapControllerr());
-  final TripController tripController = Get.find<TripController>();
-
-  late Animation<Offset> _slideAnimation;
-  late Animation<double> _fadeAnimation;
-  @override
-  void initState() {
-    super.initState();
-
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _dotsController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _pulseAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.2,
-    ).animate(CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.elasticOut,
-    ));
-
-    _pulseController.repeat(reverse: true);
-    _dotsController.repeat();
-  }
-
-  String _formatSeconds(int totalSeconds) {
-    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  @override
-  void dispose() {
-    _pulseController.dispose();
-    _dotsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Get.back(),
-        ),
-        title: const Text(
-          'البحث عن سائق',
+  Widget _buildTripTypeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'نوع الرحلة',
           style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
           ),
         ),
-        centerTitle: true,
-      ),
-      body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Obx(() => GestureDetector(
+                      onTap: () {
+                        isRoundTrip.value = false;
+                        _calculateFare();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: !isRoundTrip.value
+                              ? Colors.orange.shade400
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.arrow_forward,
+                              size: 16,
+                              color: !isRoundTrip.value
+                                  ? Colors.white
+                                  : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'ذهاب فقط',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: !isRoundTrip.value
+                                    ? Colors.white
+                                    : Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+              ),
+              Expanded(
+                child: Obx(() => GestureDetector(
+                      onTap: () {
+                        isRoundTrip.value = true;
+                        _calculateFare();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isRoundTrip.value
+                              ? Colors.orange.shade400
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.swap_horiz,
+                              size: 16,
+                              color: isRoundTrip.value
+                                  ? Colors.white
+                                  : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'ذهاب وعودة',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: isRoundTrip.value
+                                    ? Colors.white
+                                    : Colors.grey.shade600,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWaitingTimeSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'وقت الانتظار المتوقع',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+                child:
+                    _buildWaitingTimeOption(0, 'بدون انتظار', Icons.flash_on)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _buildWaitingTimeOption(5, '5 دقائق', Icons.schedule)),
+            const SizedBox(width: 8),
+            Expanded(
+                child:
+                    _buildWaitingTimeOption(10, '10 دقائق', Icons.access_time)),
+            const SizedBox(width: 8),
+            Expanded(
+                child: _buildWaitingTimeOption(15, '15 دقيقة', Icons.timer)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWaitingTimeOption(int minutes, String label, IconData icon) {
+    return Obx(() => GestureDetector(
+          onTap: () {
+            waitingTime.value = minutes;
+            _calculateFare();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: waitingTime.value == minutes
+                  ? Colors.orange.shade400
+                  : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: waitingTime.value == minutes
+                    ? Colors.orange.shade400
+                    : Colors.grey.shade200,
+                width: 1.5,
+              ),
+            ),
             child: Column(
               children: [
-                const SizedBox(height: 40),
-
-                // Trip Details Card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Obx(() {
-                    final trip = tripController.activeTrip.value;
-                    final pickupAddress =
-                        trip?.pickupLocation.address ?? 'جاري تجهيز العنوان...';
-                    final destAddress = trip?.destinationLocation.address ??
-                        'جاري تجهيز العنوان...';
-                    return Column(
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.radio_button_checked,
-                                color: Colors.green.shade600,
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                pickupAddress,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          margin: const EdgeInsets.symmetric(vertical: 12),
-                          height: 2,
-                          child: Row(
-                            children: List.generate(
-                              20,
-                              (index) => Expanded(
-                                child: Container(
-                                  margin:
-                                      const EdgeInsets.symmetric(horizontal: 1),
-                                  color: Colors.grey.shade300,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.red.shade100,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                Icons.location_on,
-                                color: Colors.red.shade600,
-                                size: 16,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                destAddress,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    );
-                  }),
+                Icon(
+                  icon,
+                  size: 18,
+                  color: waitingTime.value == minutes
+                      ? Colors.white
+                      : Colors.grey.shade600,
                 ),
-
-                const SizedBox(height: 40),
-
-                // Price and Details (dynamic)
-                Obx(() {
-                  final trip = tripController.activeTrip.value;
-                  final duration = trip?.estimatedDuration != null
-                      ? '${trip!.estimatedDuration} دقيقة'
-                      : '--';
-                  final distance = trip?.distance != null
-                      ? '${trip!.distance.toStringAsFixed(1)} كم'
-                      : '--';
-                  return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildInfoCard(
-                        icon: Icons.access_time,
-                        label: 'المدة',
-                        value: duration,
-                        color: Colors.blue,
-                      ),
-                      _buildInfoCard(
-                        icon: Icons.straighten,
-                        label: 'المسافة',
-                        value: distance,
-                        color: Colors.green,
-                      ),
-                    ],
-                  );
-                }),
-
-                const SizedBox(height: 20),
-
-                Obx(() {
-                  final trip = tripController.activeTrip.value;
-                  final fareText = trip != null
-                      ? '${trip.fare.toStringAsFixed(2)} جنيه مصري'
-                      : '--';
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.orange.shade400,
-                          Colors.orange.shade600
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      children: [
-                        const Text(
-                          'إجمالي التكلفة',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          fareText,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-
-                const SizedBox(height: 16),
-
-                // Searching Animation
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _pulseAnimation.value,
-                      child: Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade100,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade400,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.search,
-                              color: Colors.white,
-                              size: 40,
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 30),
-
-                Obx(() {
-                  final secs = tripController.remainingSearchSeconds.value;
-                  final timerText =
-                      secs > 0 ? ' — ${_formatSeconds(secs)}' : '';
-                  return Text(
-                    'جاري البحث عن سائق متاح$timerText',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  );
-                }),
-
-                const SizedBox(height: 10),
-
-                AnimatedBuilder(
-                  animation: _dotsController,
-                  builder: (context, child) {
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(3, (index) {
-                        final opacity =
-                            index == ((_dotsController.value * 3).floor() % 3)
-                                ? 1.0
-                                : 0.3;
-
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: Colors.orange.shade400.withOpacity(opacity),
-                            shape: BoxShape.circle,
-                          ),
-                        );
-                      }),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 30),
-
+                const SizedBox(height: 4),
                 Text(
-                  'سيتم إشعارك عند العثور على سائق مناسب',
+                  label,
                   style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
+                    color: waitingTime.value == minutes
+                        ? Colors.white
+                        : Colors.grey.shade600,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
                   ),
                   textAlign: TextAlign.center,
                 ),
-
-                const SizedBox(height: 40),
-
-                // Cancel Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await tripController.cancelTrip();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade200,
-                      foregroundColor: Colors.red.shade600,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'إلغاء الطلب',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                if (minutes > 0) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '+${(minutes * 0.2 * iqd_exchange_rate).toStringAsFixed(0)} د.ع',
+                    style: TextStyle(
+                      color: waitingTime.value == minutes
+                          ? Colors.white70
+                          : Colors.grey.shade500,
+                      fontSize: 8,
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 20),
+                ],
               ],
             ),
-          )),
-    );
+          ),
+        ));
   }
 
-  Widget _buildInfoCard({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
+  Widget _buildFareDisplay() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+        gradient: LinearGradient(
+          colors: [Colors.orange.shade400, Colors.orange.shade600],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.receipt_long, color: Colors.white70, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'إجمالي التكلفة',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          AnimatedBuilder(
+            animation: _priceAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: _priceAnimation.value,
+                child: Obx(() => Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          totalFare.value.toStringAsFixed(0),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Text(
+                          'دينار عراقي',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    )),
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          _buildFareBreakdown(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFareBreakdown() {
+    return Obx(() {
+      if (mapController.additionalStops.isNotEmpty ||
+          waitingTime.value > 0 ||
+          isRoundTrip.value) {
+        return Column(
+          children: [
+            Container(height: 1, color: Colors.white24),
+            const SizedBox(height: 12),
+            _buildBreakdownRow('التكلفة الأساسية:',
+                '${baseFare.value.toStringAsFixed(0)} د.ع'),
+            if (mapController.additionalStops.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              _buildBreakdownRow(
+                  'وجهات إضافية (${mapController.additionalStops.length}):',
+                  '+${(mapController.additionalStops.length * 1.5 * iqd_exchange_rate).toStringAsFixed(0)} د.ع'),
+            ],
+            if (waitingTime.value > 0) ...[
+              const SizedBox(height: 6),
+              _buildBreakdownRow('وقت انتظار (${waitingTime.value} دقيقة):',
+                  '+${(waitingTime.value * 0.2 * iqd_exchange_rate).toStringAsFixed(0)} د.ع'),
+            ],
+            if (isRoundTrip.value) ...[
+              const SizedBox(height: 6),
+              _buildBreakdownRow('ذهاب وعودة:', '×1.8'),
+            ],
+          ],
+        );
+      }
+      return const SizedBox.shrink();
+    });
+  }
+
+  Widget _buildBreakdownRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBookButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: () async {
+          if (!mapController.isPickupConfirmed.value ||
+              !mapController.isDestinationConfirmed.value) {
+            _showError('يرجى تحديد نقطة الانطلاق والوصول');
+            return;
+          }
+          // إذا الدفع عن طريق التطبيق، تحقق من الرصيد
+          if (paymentMethod.value == 'app') {
+            final user = authController.currentUser.value;
+            if (user == null ||
+                (user.balance * iqd_exchange_rate) < totalFare.value) {
+              _showError('رصيدك غير كافٍ، سيتم تحويلك لشحن المحفظة');
+              Get.toNamed(AppRoutes.RIDER_WALLET);
+              return;
+            }
+          }
+          await _requestTrip();
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange.shade400,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 4,
+          shadowColor: Colors.orange.withOpacity(0.4),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: const BoxDecoration(
+                color: Colors.white24,
+                shape: BoxShape.circle,
+              ),
+              child:
+                  const Icon(Icons.local_taxi, size: 14, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'طلب الرحلة',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _requestTrip({bool isRush = false}) async {
+    if (_isDisposed ||
+        mapController.currentLocation.value == null ||
+        mapController.selectedLocation.value == null) {
+      if (!_isDisposed) {
+        _showError('يرجى تحديد نقطة البداية والوجهة');
+      }
+      return;
+    }
+
+    final pickupLatLng = mapController.currentLocation.value!;
+    final destLatLng = mapController.selectedLocation.value!;
+
+    String pickupAddress = mapController.currentAddress.value;
+    if (pickupAddress.isEmpty) {
+      pickupAddress =
+          await LocationService.to.getAddressFromLocation(pickupLatLng);
+      if (_isDisposed) return;
+    }
+
+    String destinationAddress = mapController.selectedAddress.value;
+    if (destinationAddress.isEmpty) {
+      destinationAddress =
+          await LocationService.to.getAddressFromLocation(destLatLng);
+      if (_isDisposed) return;
+    }
+
+    final pickup = LocationPoint(
+        lat: pickupLatLng.latitude,
+        lng: pickupLatLng.longitude,
+        address: pickupAddress);
+
+    final destination = LocationPoint(
+        lat: destLatLng.latitude,
+        lng: destLatLng.longitude,
+        address: destinationAddress);
+
+    final tripDetails = {
+      'additionalStops': mapController.additionalStops
+          .map((stop) => {
+                'lat': stop.location.latitude,
+                'lng': stop.location.longitude,
+                'address': stop.address,
+                'stopNumber': stop.stopNumber,
+              })
+          .toList(),
+      'isRoundTrip': isRoundTrip.value,
+      'waitingTime': waitingTime.value,
+      'totalFare': totalFare.value,
+      'isRush': isRush,
+      'paymentMethod': paymentMethod.value,
+    };
+
+    if (!_isDisposed) {
+      await tripController.requestTrip(
+        pickup: pickup,
+        destination: destination,
+        tripDetails: tripDetails,
+      );
+    }
+  }
+
+  Widget _buildLoadingOverlay() {
+    return Obx(() {
+      final bool showOverlay = mapController.isLoading.value;
+      if (!showOverlay) return const SizedBox.shrink();
+
+      return Container(
+        color: Colors.black.withOpacity(0.3),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    color: Colors.orange.shade400,
+                    strokeWidth: 3,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'جارٍ التحميل...',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    });
+  }
+
+  // void _showSuccess(String title, String message) {
+  //   if (_isDisposed) return;
+  //   Get.snackbar(
+  //     title,
+  //     message,
+  //     snackPosition: SnackPosition.BOTTOM,
+  //     backgroundColor: Colors.green,
+  //     colorText: Colors.white,
+  //     duration: const Duration(seconds: 2),
+  //     margin: const EdgeInsets.all(16),
+  //     borderRadius: 12,
+  //   );
+  // }
+
+  void _showError(String message) {
+    if (_isDisposed) return;
+
+    Get.snackbar(
+      'خطأ',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Colors.red,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 3),
+      margin: const EdgeInsets.all(16),
+      borderRadius: 12,
     );
   }
 }

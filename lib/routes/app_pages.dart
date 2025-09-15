@@ -9,6 +9,8 @@ import 'package:transport_app/controllers/trip_controller.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/views/complete_profile_view.dart';
 import 'package:transport_app/views/rider/phone_auth_view.dart';
+import 'package:transport_app/views/rider/rider_home_view_copy.dart';
+import 'package:transport_app/views/rider/rider_profile_completion_view.dart';
 import 'package:transport_app/views/rider/user_type_selection_view.dart';
 import 'package:transport_app/views/rider/verify_otp_view.dart';
 
@@ -26,6 +28,7 @@ import 'package:transport_app/views/rider/rider_settings_view.dart';
 import 'package:transport_app/views/rider/rider_about_view.dart';
 import 'package:transport_app/views/rider/rider_notifications_view.dart';
 import 'package:transport_app/views/rider/add_balance_view.dart';
+import 'package:transport_app/views/rider/trip_cancellation_reasons_view.dart';
 
 // Driver Views
 import 'package:transport_app/views/driver/driver_home_improved_view.dart';
@@ -33,19 +36,16 @@ import 'package:transport_app/views/driver/driver_trip_tracking_view.dart';
 import 'package:transport_app/views/driver/driver_trip_history_view.dart';
 import 'package:transport_app/views/driver/driver_wallet_view.dart';
 import 'package:transport_app/views/driver/driver_profile_completion_view.dart';
-import 'package:transport_app/views/driver/driver_profile_edit_view.dart';
 // import 'package:transport_app/views/driver/driver_profile_view.dart';
 import 'package:transport_app/views/rider/rider_trip_details_view.dart';
 
 // Admin Views
-import 'package:transport_app/views/admin/admin_dashboard_view.dart';
 
 // Settings Views
 import 'package:transport_app/views/settings/image_upload_settings_view.dart';
 
 // Services
 import 'package:transport_app/services/image_upload_service.dart';
-import 'package:transport_app/services/mock_testing_service.dart';
 
 // Testing Views
 import 'package:transport_app/services/notification_service.dart';
@@ -157,6 +157,10 @@ class AppPages {
       page: () => const RiderProfileView(),
     ),
     GetPage(
+      name: AppRoutes.RIDER_PROFILE_COMPLETION,
+      page: () => const RiderProfileCompletionView(),
+    ),
+    GetPage(
       name: AppRoutes.RIDER_SETTINGS,
       page: () => const RiderSettingsView(),
     ),
@@ -175,6 +179,10 @@ class AppPages {
     GetPage(
       name: AppRoutes.RIDER_TRIP_DETAILS,
       page: () => const RiderTripDetailsView(),
+    ),
+    GetPage(
+      name: AppRoutes.RIDER_TRIP_CANCELLATION_REASONS,
+      page: () => const TripCancellationReasonsView(),
     ),
 
     // Driver Routes

@@ -56,7 +56,11 @@ class TripModel {
   final DateTime? completedAt;
   final String? notes;
   final List<LatLng>? routePolyline;
-
+ final List<Map<String, dynamic>> additionalStops;
+  final bool isRoundTrip;
+  final int waitingTime;
+  final bool isRush;
+  final String? paymentMethod; // 'cash' or 'app'
   TripModel({
     required this.id,
     required this.riderId,
@@ -73,6 +77,11 @@ class TripModel {
     this.completedAt,
     this.notes,
     this.routePolyline,
+     this.additionalStops = const [],
+    this.isRoundTrip = false,
+    this.waitingTime = 0,
+    this.isRush = false,
+    this.paymentMethod,
   });
 
   factory TripModel.fromMap(Map<String, dynamic> map) {
@@ -105,6 +114,11 @@ class TripModel {
       completedAt: (map['completedAt'] as Timestamp?)?.toDate(),
       notes: map['notes'],
       routePolyline: polyline,
+          additionalStops: List<Map<String, dynamic>>.from(map['additionalStops'] ?? []),
+      isRoundTrip: map['isRoundTrip'] ?? false,
+      waitingTime: map['waitingTime'] ?? 0,
+      isRush: map['isRush'] ?? false,
+      paymentMethod: map['paymentMethod'],
     );
   }
 
@@ -135,6 +149,11 @@ class TripModel {
       'completedAt': completedAt != null ? Timestamp.fromDate(completedAt!) : null,
       'notes': notes,
       'routePolyline': polylineData,
+         'additionalStops': additionalStops,
+      'isRoundTrip': isRoundTrip,
+      'waitingTime': waitingTime,
+      'isRush': isRush,
+      'paymentMethod': paymentMethod,
     };
   }
 

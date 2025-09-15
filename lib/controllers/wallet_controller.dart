@@ -183,7 +183,7 @@ class WalletController extends GetxController {
       // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
         _authController.currentUser.value!.balance = 
-            (_authController.currentUser.value!.balance ?? 0.0) + amount;
+            _authController.currentUser.value!.balance + amount;
         _authController.currentUser.refresh();
       }
 
@@ -342,7 +342,7 @@ class WalletController extends GetxController {
       // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
         _authController.currentUser.value!.balance = 
-            (_authController.currentUser.value!.balance ?? 0.0) + amount;
+            _authController.currentUser.value!.balance + amount;
         _authController.currentUser.refresh();
       }
 

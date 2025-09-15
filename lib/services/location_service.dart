@@ -30,6 +30,47 @@ class LocationService extends GetxService {
     return this;
   }
 
+/// الحصول على مسار مع عدة نقاط وسطى (Waypoints)
+Future<List<LatLng>> getRouteWithMultipleWaypoints(
+  LatLng from,
+  List<LatLng> waypoints,
+  LatLng to,
+) async {
+  try {
+    // بنبني string فيه كل الإحداثيات
+    final allPoints = [
+      '${from.longitude},${from.latitude}',
+      ...waypoints.map((w) => '${w.longitude},${w.latitude}'),
+      '${to.longitude},${to.latitude}',
+    ].join(';');
+
+    final url = Uri.parse(
+      'https://router.project-osrm.org/route/v1/driving/$allPoints'
+      '?overview=full&geometries=geojson&steps=false',
+    );
+
+    final response = await http.get(url);
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['routes'] != null && data['routes'].isNotEmpty) {
+        final route = data['routes'][0];
+        final coordinates = route['geometry']['coordinates'] as List;
+
+        return coordinates
+            .map((coord) => LatLng(coord[1].toDouble(), coord[0].toDouble()))
+            .toList();
+      }
+    }
+
+    // fallback: لو فشل، رجّع خط مستقيم يمر على كل النقاط
+    return [from, ...waypoints, to];
+  } catch (e) {
+    logger.w('خطأ في الحصول على المسار مع عدة نقاط وسطى: $e');
+    return [from, ...waypoints, to];
+  }
+}
+
   /// طلب إذن الموقع
   Future<bool> _requestLocationPermission() async {
     try {
@@ -63,8 +104,6 @@ class LocationService extends GetxService {
 
   /// الحصول على الموقع الحالي
   Future<LatLng?> getCurrentLocation() async {
-    Position? position;
-
     try {
       if (!hasLocationPermission.value) {
         await _requestLocationPermission();
@@ -85,7 +124,10 @@ class LocationService extends GetxService {
 
       return location;
     } catch (e) {
-      position = await Geolocator.getLastKnownPosition();
+      final lastKnownPosition = await Geolocator.getLastKnownPosition();
+      if (lastKnownPosition != null) {
+        return LatLng(lastKnownPosition.latitude, lastKnownPosition.longitude);
+      }
 
       logger.w('خطأ في الحصول على الموقع: $e');
       Get.snackbar(
@@ -132,21 +174,23 @@ class LocationService extends GetxService {
   Future<List<LocationSearchResult>> searchLocation(String query) async {
     try {
       if (query.trim().isEmpty) return [];
+       await setLocaleIdentifier('ar_EG'); // يفضل تعملها في init أو قبل أول استخدام
 
       List<Location> locations = await locationFromAddress(
         query,
-        //  localeIdentifier: 'ar_EG',
-      );
+       );
+
+
 
       List<LocationSearchResult> results = [];
 
       for (Location location in locations) {
         try {
-          List<Placemark> placemarks = await placemarkFromCoordinates(
-            location.latitude,
-            location.longitude,
-            //   localeIdentifier: 'ar_EG',
-          );
+       await setLocaleIdentifier('ar_EG'); // يفضل تعملها في init أو قبل أول استخدام
+List<Placemark> placemarks = await placemarkFromCoordinates(
+  location.latitude,
+  location.longitude,
+);
 
           if (placemarks.isNotEmpty) {
             Placemark placemark = placemarks.first;
@@ -235,14 +279,15 @@ class LocationService extends GetxService {
   /// الحصول على العنوان من الإحداثيات
   Future<String> getAddressFromLocation(LatLng location) async {
     try {
-      List<Placemark> placemarks = await placemarkFromCoordinates(
+      final result = await placemarkFromCoordinates(
         location.latitude,
         location.longitude,
         //  localeIdentifier: 'ar_EG',
       );
 
-      if (placemarks.isNotEmpty) {
-        return _formatAddress(placemarks.first);
+      // Ensure result is a List<Placemark>
+      if (result.isNotEmpty) {
+        return _formatAddress(result.first);
       }
 
       return 'موقع غير محدد';
@@ -360,7 +405,7 @@ class LocationService extends GetxService {
       // فشل → ارسم مسارين مستقيمين كحل احتياطي
       return [from, waypoint, to];
     } catch (e) {
-      logger.w('خطأ في الحصول على المسار مع محطة وسطى: $e');
+      logger.w('خطأ في الحصول على المسار مع المحطة : $e');
       return [from, waypoint, to];
     }
   }

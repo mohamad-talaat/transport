@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Base user model that contains common fields for both drivers and riders
 abstract class BaseUserModel {

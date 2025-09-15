@@ -5,12 +5,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:transport_app/main.dart';
 import 'package:transport_app/models/trip_model.dart';
+import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
-import 'package:transport_app/services/driver_profile_service.dart'
-    hide logger, Timestamp;
+import 'package:transport_app/services/driver_profile_service.dart';
 import 'package:transport_app/services/location_service.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/views/driver/driver_trip_request_dialog.dart';
+import 'package:transport_app/views/driver/rider_info_widget.dart';
 
 class DriverController extends GetxController {
   static DriverController get to => Get.find();
@@ -109,7 +110,7 @@ class DriverController extends GetxController {
         return false;
       }
 
-        // التحقق من موافقة الإدارة (users.isApproved)
+      // التحقق من موافقة الإدارة (users.isApproved)
       final isApproved = await profileService.isDriverApproved(userId);
       if (!isApproved) {
         Get.snackbar(
@@ -443,6 +444,9 @@ class DriverController extends GetxController {
 
       _startCurrentTripListener(trip.id);
 
+      // عرض معلومات الراكب للسائق
+      _showRiderInfo(trip);
+
       Get.snackbar(
         'تم قبول الرحلة',
         'توجه إلى موقع الراكب',
@@ -462,6 +466,59 @@ class DriverController extends GetxController {
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
+    }
+  }
+
+  /// عرض معلومات الراكب للسائق
+  void _showRiderInfo(TripModel trip) async {
+    try {
+      // جلب بيانات الراكب
+      UserModel? rider;
+      final snap = await _firestore.collection('users').doc(trip.riderId).get();
+      if (snap.exists) {
+        rider = UserModel.fromMap(snap.data()!);
+      }
+
+      if (rider != null && Get.context != null) {
+        Get.dialog(
+          Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: RiderInfoWidget(
+                rider: rider,
+                onCall: () {
+                  Get.back();
+                  // TODO: إضافة منطق الاتصال
+                  Get.snackbar(
+                    'اتصال',
+                    'جاري الاتصال بـ ${rider!.name}',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                  );
+                },
+                onMessage: () {
+                  Get.back();
+                  // TODO: إضافة منطق الرسائل
+                  Get.snackbar(
+                    'رسالة',
+                    'جاري فتح المحادثة مع ${rider!.name}',
+                    snackPosition: SnackPosition.BOTTOM,
+                    backgroundColor: Colors.blue,
+                    colorText: Colors.white,
+                  );
+                },
+              ),
+            ),
+          ),
+          barrierDismissible: true,
+        );
+      }
+    } catch (e) {
+      logger.w('خطأ في عرض معلومات الراكب: $e');
     }
   }
 

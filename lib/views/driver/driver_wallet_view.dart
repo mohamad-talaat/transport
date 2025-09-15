@@ -1217,39 +1217,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
   //   );
   // }
 
-  Widget _buildEarningOverviewCard(
-      String title, RxDouble amount, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 30),
-          const SizedBox(height: 10),
-          Obx(() => Text(
-                '${amount.value.toStringAsFixed(2)} ج.م',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              )),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildQuickActions() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 15),

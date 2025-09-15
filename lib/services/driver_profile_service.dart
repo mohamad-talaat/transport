@@ -341,7 +341,6 @@ class DriverProfileService extends GetxService {
           'carColor': '',
           'carYear': '',
           'carNumber': '',
-          'licenseNumber': '',
           'workingAreas': [],
           'carImage': null,
           'licenseImage': null,

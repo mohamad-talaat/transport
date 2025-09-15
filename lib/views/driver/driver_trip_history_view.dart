@@ -138,7 +138,7 @@ class _TripHistoryTile extends StatelessWidget {
               Text('${trip.estimatedDuration} دقيقة'),
             ],
           ),
-          if (trip.completedAt != null || trip.createdAt != null) ...[
+          if (trip.completedAt != null) ...[
             const SizedBox(height: 8),
             Row(
               children: [

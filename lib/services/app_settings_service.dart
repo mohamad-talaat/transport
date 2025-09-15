@@ -259,6 +259,14 @@ class AppSettingsService extends GetxService {
     return currentSettings.value!.calculateFare(distanceKm, governorate);
   }
 
+  // عمولة التطبيق من السائق حسب المسافة (د.ع)
+  int commissionIqD(double distanceKm) {
+    return distanceKm <= 10.0 ? 250 : 500;
+  }
+
+  // حد الدين الأعظمي على السائق لإيقاف استقبال الرحلات (د.ع)
+  int get driverDebtLimitIqD => 15000;
+
   /// التحقق من دعم المحافظة
   bool isGovernorateSupported(String governorate) {
     if (currentSettings.value == null) return true; // افتراضياً مدعومة

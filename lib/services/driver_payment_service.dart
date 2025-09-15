@@ -5,11 +5,12 @@ import '../main.dart';
 
 class DriverPaymentService extends GetxService {
   static DriverPaymentService get to => Get.find();
-  
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   // متغيرات تفاعلية للأرباح
-  final Rx<DriverEarningsModel?> currentEarnings = Rx<DriverEarningsModel?>(null);
+  final Rx<DriverEarningsModel?> currentEarnings =
+      Rx<DriverEarningsModel?>(null);
   final RxList<PaymentModel> recentPayments = <PaymentModel>[].obs;
   final RxBool isLoading = false.obs;
 
@@ -24,7 +25,7 @@ class DriverPaymentService extends GetxService {
 
       final tripData = tripDoc.data()!;
       final tripFare = (tripData['fare'] ?? 0.0).toDouble();
-      
+
       // حساب العمولة الديناميكية
       final commissionRate = _calculateCommissionRate(tripData);
       final commission = tripFare * commissionRate;
@@ -41,20 +42,20 @@ class DriverPaymentService extends GetxService {
   double _calculateCommissionRate(Map<String, dynamic> tripData) {
     final distance = (tripData['distance'] ?? 0.0).toDouble();
     final fare = (tripData['fare'] ?? 0.0).toDouble();
-    
+
     // عمولة أساسية 15%
     double baseCommission = 0.15;
-    
+
     // خصم إضافي للمسافات القصيرة
     if (distance < 5.0) {
       baseCommission += 0.05;
     }
-    
+
     // خصم أقل للرحلات باهظة الثمن
     if (fare > 100.0) {
       baseCommission -= 0.03;
     }
-    
+
     return baseCommission.clamp(0.10, 0.25);
   }
 
@@ -66,9 +67,9 @@ class DriverPaymentService extends GetxService {
   }) async {
     try {
       isLoading.value = true;
-      
+
       final paymentId = 'payment_${DateTime.now().millisecondsSinceEpoch}';
-      
+
       final payment = PaymentModel(
         id: paymentId,
         userId: driverId,
@@ -79,11 +80,14 @@ class DriverPaymentService extends GetxService {
         createdAt: DateTime.now(),
       );
 
-      await _firestore.collection('payments').doc(paymentId).set(payment.toMap());
-      
+      await _firestore
+          .collection('payments')
+          .doc(paymentId)
+          .set(payment.toMap());
+
       final processedPayment = await _processPayment(payment);
       await _updateDriverEarnings(driverId, amount);
-      
+
       recentPayments.insert(0, processedPayment);
       if (recentPayments.length > 10) {
         recentPayments.removeLast();
@@ -113,7 +117,10 @@ class DriverPaymentService extends GetxService {
         gatewayResponse: 'تم إضافة الأرباح بنجاح',
       );
 
-      await _firestore.collection('payments').doc(payment.id).update(updatedPayment.toMap());
+      await _firestore
+          .collection('payments')
+          .doc(payment.id)
+          .update(updatedPayment.toMap());
       return updatedPayment;
     } catch (e) {
       return payment.copyWith(
@@ -127,15 +134,10 @@ class DriverPaymentService extends GetxService {
   Future<void> _updateDriverEarnings(String driverId, double amount) async {
     try {
       final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final weekStart = today.subtract(Duration(days: today.weekday - 1));
-      final monthStart = DateTime(now.year, now.month, 1);
-
-      final earningsDoc = await _firestore.collection('driver_earnings').doc(driverId).get();
+      final earningsDoc =
+          await _firestore.collection('driver_earnings').doc(driverId).get();
 
       if (earningsDoc.exists) {
-        final currentData = earningsDoc.data()!;
-        
         await _firestore.collection('driver_earnings').doc(driverId).update({
           'totalEarnings': FieldValue.increment(amount),
           'totalTrips': FieldValue.increment(1),
@@ -155,7 +157,10 @@ class DriverPaymentService extends GetxService {
           lastUpdated: now,
         );
 
-        await _firestore.collection('driver_earnings').doc(driverId).set(newEarnings.toMap());
+        await _firestore
+            .collection('driver_earnings')
+            .doc(driverId)
+            .set(newEarnings.toMap());
       }
 
       await loadDriverEarnings(driverId);
@@ -167,10 +172,12 @@ class DriverPaymentService extends GetxService {
   /// تحميل أرباح السائق
   Future<void> loadDriverEarnings(String driverId) async {
     try {
-      final earningsDoc = await _firestore.collection('driver_earnings').doc(driverId).get();
+      final earningsDoc =
+          await _firestore.collection('driver_earnings').doc(driverId).get();
 
       if (earningsDoc.exists) {
-        currentEarnings.value = DriverEarningsModel.fromMap(earningsDoc.data()!);
+        currentEarnings.value =
+            DriverEarningsModel.fromMap(earningsDoc.data()!);
       } else {
         currentEarnings.value = DriverEarningsModel(
           driverId: driverId,

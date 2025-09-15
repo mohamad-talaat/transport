@@ -37,7 +37,6 @@ class _DriverProfileCompletionViewState
   VehicleType _selectedVehicleType = VehicleType.car;
   bool _isLoading = false;
   bool _isInitializing = true;
-  String? _profileImage;
   String? _nationalIdImage;
   String? _drivingLicenseImage;
   String? _vehicleImage;
@@ -93,7 +92,7 @@ class _DriverProfileCompletionViewState
     _vehiclePlateController.text = driver.vehiclePlateNumber ?? '';
     _emergencyContactController.text = driver.emergencyContact ?? '';
 
-    _profileImage = driver.profileImage;
+    // _profileImage = driver.profileImage;
     _nationalIdImage = driver.nationalIdImage;
     _drivingLicenseImage = driver.drivingLicenseImage;
     _vehicleImage = driver.vehicleImage;
@@ -171,7 +170,7 @@ class _DriverProfileCompletionViewState
           setState(() {
             switch (imageType) {
               case 'profile':
-                _profileImage = imageUrl;
+                // _profileImage = imageUrl;
                 break;
               case 'nationalId':
                 _nationalIdImage = imageUrl;
@@ -382,14 +381,17 @@ class _DriverProfileCompletionViewState
     if (_nameController.text.isEmpty) missingFields.add('الاسم الكامل');
     if (_phoneController.text.isEmpty) missingFields.add('رقم الهاتف');
     if (_emailController.text.isEmpty) missingFields.add('البريد الإلكتروني');
-    if (_nationalIdController.text.isEmpty)
+    if (_nationalIdController.text.isEmpty) {
       missingFields.add('رقم الهوية الوطنية');
+    }
     if (_nationalIdImage == null) missingFields.add('صورة الهوية الوطنية');
-    if (_drivingLicenseController.text.isEmpty)
+    if (_drivingLicenseController.text.isEmpty) {
       missingFields.add('رقم رخصة القيادة');
+    }
     if (_drivingLicenseImage == null) missingFields.add('صورة رخصة القيادة');
-    if (_vehicleModelController.text.isEmpty)
+    if (_vehicleModelController.text.isEmpty) {
       missingFields.add('موديل السيارة');
+    }
     if (_vehicleColorController.text.isEmpty) missingFields.add('لون السيارة');
     if (_vehiclePlateController.text.isEmpty) missingFields.add('رقم اللوحة');
     if (_vehicleImage == null) missingFields.add('صورة السيارة');
@@ -598,8 +600,9 @@ class _DriverProfileCompletionViewState
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value?.isEmpty ?? true)
+                          if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال رقم الهاتف';
+                          }
                           return null;
                         },
                       ),
@@ -639,8 +642,9 @@ class _DriverProfileCompletionViewState
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value?.isEmpty ?? true)
+                          if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال رقم الهوية';
+                          }
                           return null;
                         },
                       ),
@@ -720,8 +724,9 @@ class _DriverProfileCompletionViewState
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value?.isEmpty ?? true)
+                          if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال لون السيارة';
+                          }
                           return null;
                         },
                       ),
@@ -734,8 +739,9 @@ class _DriverProfileCompletionViewState
                           border: OutlineInputBorder(),
                         ),
                         validator: (value) {
-                          if (value?.isEmpty ?? true)
+                          if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال رقم اللوحة';
+                          }
                           return null;
                         },
                       ),

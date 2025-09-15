@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/map_controller.dart';
+// import 'package:transport_app/controllers/map_controller_copy.dart';
 import 'package:transport_app/models/trip_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
@@ -49,12 +50,9 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
   void _initializeMap() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final trip = driverController.currentTrip.value;
-      if (trip != null) {
-        mapController.showTripRoute(
-          pickup: trip.pickupLocation.latLng,
-          destination: trip.destinationLocation.latLng,
-          routePolyline: trip.routePolyline,
-        );
+      if (trip != null && trip.routePolyline != null) {
+        // Use existing MapControllerr API to draw the route polyline
+        mapController.drawTripRoute(trip.routePolyline!);
       }
     });
   }
@@ -94,8 +92,8 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
     return FlutterMap(
       mapController: mapController.mapController,
       options: MapOptions(
-        initialCenter : const LatLng(30.0444, 31.2357), // Cairo
-        initialZoom : 15,
+        initialCenter: const LatLng(30.0444, 31.2357), // Cairo
+        initialZoom: 15,
         onMapReady: () {
           mapController.onMapReady();
         },
@@ -107,12 +105,11 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
         ),
         // Route Polyline
         Obx(() {
-          
           final trip = driverController.currentTrip.value;
           if (trip?.routePolyline != null) {
             return PolylineLayer(
               polylines: [
-                 Polyline<LatLng>(
+                Polyline<LatLng>(
                   points: trip!.routePolyline!,
                   strokeWidth: 4,
                   color: Colors.blue,
@@ -271,16 +268,162 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              '${trip.distance.toStringAsFixed(1)} كم • ${_formatTime(trip.estimatedDuration)}',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
+            Row(
+              children: [
+                Text(
+                  '${trip.distance.toStringAsFixed(1)} كم • ${_formatTime(trip.estimatedDuration)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if ((trip.paymentMethod ?? 'cash') == 'cash')
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.attach_money,
+                            size: 14, color: Colors.orange.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'الراكب سيدفع نقداً – يرجى استلام المبلغ',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.orange.shade800,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
+            const SizedBox(height: 12),
+            // تفاصيل الرحلة مع جميع نقاط التوقف
+            _buildTripDetails(trip),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildTripDetails(TripModel trip) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[600], size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'تفاصيل الرحلة',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue[600],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          // نقطة الانطلاق
+          _buildLocationRow(
+            icon: Icons.trip_origin,
+            iconColor: Colors.black,
+            label: 'انطلاق',
+            address: trip.pickupLocation.address,
+          ),
+          const SizedBox(height: 6),
+          // نقطة الوصول الرئيسية
+          _buildLocationRow(
+            icon: Icons.location_on,
+            iconColor: Colors.red,
+            label: 'وصول 1',
+            address: trip.destinationLocation.address,
+          ),
+          // نقاط الوصول الإضافية إذا وجدت
+          if (trip.additionalStops.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...trip.additionalStops.asMap().entries.map((entry) {
+              int index = entry.key;
+              var stop = entry.value;
+              return Column(
+                children: [
+                  _buildLocationRow(
+                    icon: Icons.add_location_alt,
+                    iconColor: Colors.orange,
+                    label: 'وصول ${index + 2}',
+                    address: stop['address'] ?? 'عنوان غير محدد',
+                  ),
+                  if (index < trip.additionalStops.length - 1)
+                    const SizedBox(height: 6),
+                ],
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLocationRow({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String address,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: iconColor.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: iconColor, size: 14),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: iconColor,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                address,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -319,11 +462,12 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
     );
   }
 
-  Widget _buildTripDetails(TripModel trip) {
+  // Deprecated block kept earlier by project; safe to remove unused helpers
+  Widget _buildOldTripDetails(TripModel trip) {
     return Column(
       children: [
         // Pickup
-        _buildLocationRow(
+        _buildOldLocationRow(
           Icons.my_location,
           Colors.green,
           'موقع الراكب',
@@ -333,7 +477,7 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
         const SizedBox(height: 12),
 
         // Destination
-        _buildLocationRow(
+        _buildOldLocationRow(
           Icons.location_on,
           Colors.red,
           'الوجهة',
@@ -343,7 +487,7 @@ class _DriverTripTrackingViewState extends State<DriverTripTrackingView>
     );
   }
 
-  Widget _buildLocationRow(
+  Widget _buildOldLocationRow(
       IconData icon, Color color, String label, String address) {
     return Row(
       children: [

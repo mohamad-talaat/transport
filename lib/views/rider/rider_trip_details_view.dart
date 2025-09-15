@@ -11,7 +11,10 @@ class RiderTripDetailsView extends StatelessWidget {
         Get.arguments is TripModel ? Get.arguments as TripModel : null;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تفاصيل الرحلة'),
+        title: const Text(
+          'تفاصيل الرحلة',
+          style: TextStyle(fontSize: 15),
+        ),
         centerTitle: true,
       ),
       body: Padding(

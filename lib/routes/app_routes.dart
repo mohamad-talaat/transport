@@ -13,6 +13,7 @@ class AppRoutes {
   static const RIDER_HOME = '/rider-home';
   static const RIDER_SEARCHING = '/rider-searching';
   static const RIDER_PROFILE = '/rider-profile';
+  static const RIDER_PROFILE_COMPLETION = '/rider-profile-completion';
   static const RIDER_WALLET = '/rider-wallet';
   static const RIDER_ADD_BALANCE = '/rider-add-balance';
   static const RIDER_TRIP_HISTORY = '/rider-trip-history';
@@ -22,6 +23,7 @@ class AppRoutes {
   static const RIDER_SETTINGS = '/rider-settings';
   static const RIDER_ABOUT = '/rider-about';
   static const RIDER_HELP = '/rider-help';
+  static const RIDER_TRIP_CANCELLATION_REASONS = '/rider-trip-cancellation-reasons';
 
   // مسارات السائق (Driver)
   static const DRIVER_HOME = '/driver-home';

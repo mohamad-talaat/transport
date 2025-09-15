@@ -20,7 +20,7 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
   late Animation<double> _textAnimation;
   late Animation<double> _fadeAnimation;
 
-  bool _hasNavigated = false; // Flag to prevent multiple navigations
+  bool _hasNavigated = false;
 
   @override
   void initState() {
@@ -64,7 +64,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
       curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
     ));
 
-    // بدء الأنيميشن
     _logoController.forward();
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) {
@@ -75,12 +74,10 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
   Future<void> _initializeApp() async {
     try {
-      // تقليل الانتظار لتسريع الدخول للواجهة الرئيسية
       await Future.delayed(const Duration(milliseconds: 800));
 
       if (!mounted || _hasNavigated) return;
 
-      // فحص حالة المستخدم
       await _checkUserStatus();
     } catch (e) {
       logger.t('خطأ في تهيئة التطبيق: $e');
@@ -96,33 +93,23 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
     try {
       AuthController authController;
 
-      // التحقق من وجود AuthController أو إنشاؤه
       if (Get.isRegistered<AuthController>()) {
         authController = Get.find<AuthController>();
       } else {
-        // إنشاء AuthController بدون تشغيل _setInitialScreen فوراً
         authController = Get.put(AuthController(), permanent: true);
-
-        // انتظار قصير للسماح للـ controller بالتهيئة
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
-      // انتظار قصير لتحميل البيانات المحفوظة
       await Future.delayed(const Duration(milliseconds: 300));
-
-      // التحقق من حالة المستخدم
       final user = authController.currentUser.value;
 
       if (authController.isLoggedIn.value && user != null) {
-        // المستخدم مسجل دخول
-        // لديه نوع مستخدم - الانتقال للصفحة الرئيسية
         if (user.userType == UserType.rider) {
           _navigateToRoute(AppRoutes.RIDER_HOME);
         } else {
           _navigateToRoute(AppRoutes.DRIVER_HOME);
         }
       } else {
-        // المستخدم غير مسجل دخول
         _navigateToUserTypeSelection();
       }
     } catch (e) {
@@ -142,7 +129,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
 
     _hasNavigated = true;
 
-    // التأكد من أن الRoute الحالي ليس نفس الRoute المطلوب
     if (Get.currentRoute != route) {
       Get.offAllNamed(route);
     }
@@ -166,9 +152,9 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Colors.blue.shade600,
-              Colors.blue.shade800,
-              Colors.blue.shade900,
+              Colors.orange.shade400,
+              Colors.orange.shade600,
+              Colors.orange.shade800,
             ],
           ),
         ),
@@ -176,7 +162,6 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo مع Animation
               AnimatedBuilder(
                 animation: _logoAnimation,
                 builder: (context, child) {
@@ -185,23 +170,23 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                     child: FadeTransition(
                       opacity: _fadeAnimation,
                       child: Container(
-                        width: 120,
-                        height: 120,
+                        width: 110,
+                        height: 110,
                         decoration: BoxDecoration(
                           color: Colors.white,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 20,
-                              offset: const Offset(0, 10),
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 15,
+                              offset: const Offset(0, 8),
                             ),
                           ],
                         ),
                         child: Icon(
-                          Icons.directions_car,
+                          Icons.local_taxi,
                           size: 60,
-                          color: Colors.blue.shade600,
+                          color: Colors.orange.shade500,
                         ),
                       ),
                     ),
@@ -209,34 +194,37 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                 },
               ),
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 35),
 
-              // النصوص مع Animation
               AnimatedBuilder(
                 animation: _textAnimation,
                 builder: (context, child) {
                   return Transform.translate(
-                    offset: Offset(0, 50 * (1 - _textAnimation.value)),
+                    offset: Offset(0, 40 * (1 - _textAnimation.value)),
                     child: Opacity(
                       opacity: _textAnimation.value,
-                      child: const Column(
+                      child:   Column(
                         children: [
                           Text(
-                            'تطبيق النقل',
+                            'تكسي البصرة',
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              letterSpacing: 1.2,
+                          //    color: Colors.white,
+                              color: Colors.brown[700] , 
+
+                              letterSpacing: 1.3,
                             ),
                           ),
-                          SizedBox(height: 12),
+                          SizedBox(height: 10),
                           Text(
                             'رحلتك تبدأ هنا',
                             style: TextStyle(
                               fontSize: 18,
-                              color: Colors.white70,
-                              fontWeight: FontWeight.w300,
+                             // color: Colors.white70,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.grey.shade800
+
                             ),
                           ),
                         ],
@@ -246,9 +234,8 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                 },
               ),
 
-              const SizedBox(height: 100),
+              const SizedBox(height: 90),
 
-              // مؤشر التحميل
               AnimatedBuilder(
                 animation: _textAnimation,
                 builder: (context, child) {
@@ -261,17 +248,17 @@ class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
                           height: 40,
                           child: CircularProgressIndicator(
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white.withOpacity(0.8),
+                              Colors.white,
                             ),
                             strokeWidth: 3,
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 18),
                         const Text(
                           'جاري التحميل...',
                           style: TextStyle(
                             fontSize: 16,
-                            color: Colors.white60,
+                            color: Colors.white70,
                             fontWeight: FontWeight.w400,
                           ),
                         ),

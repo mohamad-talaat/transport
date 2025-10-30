@@ -1,14 +1,27 @@
-buildscript {    
-ext.kotlin_version = '2.1.0'
+buildscript {
+    ext.kotlin_version = '2.1.0'
+
+    // ضع ext هنا قبل repositories
+    ext {
+        compileSdkVersion = 36
+        minSdkVersion = 23
+        targetSdkVersion = 36
+        ndkVersion = "25.1.8937393"
+    }
 
     repositories {
         google()
         mavenCentral()
     }
+
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.6.0'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath "com.google.gms:google-services:4.4.2"
+        classpath 'com.android.tools.build:gradle:8.7.0'
+        // classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        // classpath "com.google.gms:google-services:4.4.2"
+
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0"
+classpath "com.google.gms:google-services:4.4.2"
+
     }
 }
 

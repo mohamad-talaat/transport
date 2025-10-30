@@ -6,7 +6,6 @@ import 'package:transport_app/controllers/driver_controller.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/main.dart';
 import 'package:transport_app/services/driver_discount_service.dart';
-import 'package:transport_app/services/firebase_service.dart';
 import 'package:transport_app/models/payment_model.dart';
 import 'package:transport_app/models/trip_model.dart';
 
@@ -22,9 +21,8 @@ class _DriverWalletViewState extends State<DriverWalletView> {
   final AuthController authController = AuthController.to;
   final DriverDiscountService discountService =
       Get.find<DriverDiscountService>();
-  final FirebaseService firebaseService = FirebaseService.to;
+  // final FirebaseService firebaseService = FirebaseService.to;
 
-  // Reactive variables for dynamic data
   final RxList<PaymentModel> recentTransactions = <PaymentModel>[].obs;
   final RxList<TripModel> recentTrips = <TripModel>[].obs;
   final RxBool isLoadingTransactions = false.obs;
@@ -36,13 +34,11 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     _loadDynamicData();
   }
 
-  /// تحميل البيانات الديناميكية من Firebase
   Future<void> _loadDynamicData() async {
     await _loadRecentTransactions();
     await _loadRecentTrips();
   }
 
-  /// تحميل المعاملات الأخيرة
   Future<void> _loadRecentTransactions() async {
     try {
       isLoadingTransactions.value = true;
@@ -58,7 +54,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// تحميل الرحلات الأخيرة
   Future<void> _loadRecentTrips() async {
     try {
       isLoadingTrips.value = true;
@@ -74,7 +69,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// جلب المعاملات الأخيرة من Firebase
   Future<List<PaymentModel>> _getRecentTransactions(String userId) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -95,7 +89,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// جلب الرحلات الأخيرة من Firebase
   Future<List<TripModel>> _getRecentTrips(String userId) async {
     try {
       final snapshot = await FirebaseFirestore.instance
@@ -117,7 +110,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// الحصول على عنوان المعاملة
   String _getTransactionTitle(PaymentModel transaction) {
     switch (transaction.method) {
       case PaymentMethod.wallet:
@@ -133,14 +125,12 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// الحصول على مبلغ المعاملة
   String _getTransactionAmount(PaymentModel transaction) {
     final prefix = transaction.amount >= 0 ? '+ ' : '- ';
     final amount = transaction.amount.abs();
-    return '$prefix${amount.toStringAsFixed(2)} ج.م';
+    return '$prefix${amount.toStringAsFixed(2)} د.ع';
   }
 
-  /// تنسيق التاريخ
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -156,7 +146,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// الحصول على أيقونة المعاملة
   IconData _getTransactionIcon(PaymentModel transaction) {
     switch (transaction.method) {
       case PaymentMethod.wallet:
@@ -172,7 +161,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// الحصول على لون المعاملة
   Color _getTransactionColor(PaymentModel transaction) {
     if (transaction.amount >= 0) {
       return Colors.green;
@@ -281,7 +269,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
           ),
           const SizedBox(height: 20),
           Obx(() => Text(
-                '${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} ج.م',
+                '${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} د.ع',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 36,
@@ -333,7 +321,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                 child: _buildEarningsCard(
                   'اليوم',
                   Obx(() => Text(
-                        '${driverController.todayEarnings.value.toStringAsFixed(2)} ج.م',
+                        '${driverController.todayEarnings.value.toStringAsFixed(2)} د.ع',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -349,7 +337,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                 child: _buildEarningsCard(
                   'الأسبوع',
                   Obx(() => Text(
-                        '${driverController.weekEarnings.value.toStringAsFixed(2)} ج.م',
+                        '${driverController.weekEarnings.value.toStringAsFixed(2)} د.ع',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -369,7 +357,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                 child: _buildEarningsCard(
                   'الشهر',
                   Obx(() => Text(
-                        '${driverController.monthEarnings.value.toStringAsFixed(2)} ج.م',
+                        '${driverController.monthEarnings.value.toStringAsFixed(2)} د.ع',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -542,7 +530,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
 
             return Column(
               children: [
-                // عرض المعاملات المالية
                 ...recentTransactions
                     .map((transaction) => _buildTransactionItem(
                           _getTransactionTitle(transaction),
@@ -551,11 +538,9 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                           _getTransactionIcon(transaction),
                           _getTransactionColor(transaction),
                         )),
-
-                // عرض الرحلات المكتملة
                 ...recentTrips.map((trip) => _buildTransactionItem(
                       'رحلة #${trip.id.substring(0, 8)}',
-                      '+ ${(trip.fare * 0.8).toStringAsFixed(2)} ج.م',
+                      '+ ${(trip.fare * 0.8).toStringAsFixed(2)} د.ع',
                       _formatDate(trip.completedAt ?? trip.createdAt),
                       Icons.directions_car,
                       Colors.green,
@@ -635,7 +620,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'الرصيد المتاح: ${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} ج.م',
+              'الرصيد المتاح: ${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} د.ع',
               style: TextStyle(
                 color: Colors.grey[600],
                 fontSize: 14,
@@ -647,13 +632,13 @@ class _DriverWalletViewState extends State<DriverWalletView> {
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
                 labelText: 'المبلغ المراد سحبه',
-                suffixText: 'ج.م',
+                suffixText: 'د.ع',
                 border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 10),
             Text(
-              'الحد الأدنى للسحب: 50 ج.م',
+              'الحد الأدنى للسحب: 50 د.ع',
               style: TextStyle(
                 color: Colors.grey[600],
                 fontSize: 12,
@@ -675,7 +660,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
               } else {
                 Get.snackbar(
                   'خطأ',
-                  'يرجى إدخال مبلغ صحيح (الحد الأدنى 50 ج.م)',
+                  'يرجى إدخال مبلغ صحيح (الحد الأدنى 50 د.ع)',
                   snackPosition: SnackPosition.BOTTOM,
                   backgroundColor: Colors.red,
                   colorText: Colors.white,
@@ -707,7 +692,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     Get.dialog(
       AlertDialog(
         title: const Text('تأكيد السحب'),
-        content: Text('هل تريد سحب ${amount.toStringAsFixed(2)} ج.م؟'),
+        content: Text('هل تريد سحب ${amount.toStringAsFixed(2)} د.ع؟'),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
@@ -716,7 +701,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
           ElevatedButton(
             onPressed: () {
               Get.back();
-              // TODO: معالجة عملية السحب مع الخدمة المالية
+
               authController.updateBalance(-amount);
               Get.snackbar(
                 'تم بنجاح',
@@ -811,7 +796,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
 
                   return ListView(
                     children: [
-                      // عرض المعاملات المالية
                       ...recentTransactions
                           .map((transaction) => _buildTransactionItem(
                                 _getTransactionTitle(transaction),
@@ -820,11 +804,9 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                                 _getTransactionIcon(transaction),
                                 _getTransactionColor(transaction),
                               )),
-
-                      // عرض الرحلات المكتملة
                       ...recentTrips.map((trip) => _buildTransactionItem(
                             'رحلة #${trip.id.substring(0, 8)}',
-                            '+ ${(trip.fare * 0.8).toStringAsFixed(2)} ج.م',
+                            '+ ${(trip.fare * 0.8).toStringAsFixed(2)} د.ع',
                             _formatDate(trip.completedAt ?? trip.createdAt),
                             Icons.directions_car,
                             Colors.green,
@@ -904,8 +886,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                 ],
               ),
               const SizedBox(height: 24),
-
-              // معلومات إضافية عن كود الخصم
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -931,7 +911,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '• يمكن استخدام كود واحد فقط لكل سائق\n• الكود صالح لمدة 30 يوم\n• الحد الأقصى للخصم: 50 ج.م',
+                      '• يمكن استخدام كود واحد فقط لكل سائق\n• الكود صالح لمدة 30 يوم\n• الحد الأقصى للخصم: 50 د.ع',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.orange.shade700,
@@ -940,10 +920,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // زر طلب كود جديد
               OutlinedButton.icon(
                 onPressed: () => _requestNewDiscountCode(),
                 icon: const Icon(Icons.wechat_sharp, color: Colors.green),
@@ -958,9 +935,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
               Row(
                 children: [
                   Expanded(
@@ -989,7 +964,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                                         colorText: Colors.white,
                                         duration: const Duration(seconds: 3),
                                       );
-                                      // تحديث البيانات
+
                                       await _refreshAllData();
                                     } else {
                                       Get.snackbar(
@@ -1040,7 +1015,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     );
   }
 
-  /// طلب كود خصم جديد
   void _requestNewDiscountCode() {
     Get.dialog(
       AlertDialog(
@@ -1069,10 +1043,8 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     );
   }
 
-  /// استخدام كود الخصم
   Future<Map<String, dynamic>> _redeemDiscountCode(String code) async {
     try {
-      // التحقق من صحة الكود
       if (code.length < 6) {
         return {
           'success': false,
@@ -1080,20 +1052,17 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         };
       }
 
-      // محاكاة استخدام الكود (يمكن استبدالها بالخدمة الحقيقية)
       await Future.delayed(const Duration(seconds: 2));
 
-      // إضافة المبلغ إلى المحفظة
-      const discountAmount = 25.0; // مبلغ الخصم
+      const discountAmount = 25.0;
       await authController.updateBalance(discountAmount);
 
-      // تسجيل المعاملة
       await _recordDiscountTransaction(code, discountAmount);
 
       return {
         'success': true,
         'message':
-            'تم استخدام كود الخصم بنجاح! تم إضافة $discountAmount ج.م إلى محفظتك',
+            'تم استخدام كود الخصم بنجاح! تم إضافة $discountAmount د.ع إلى محفظتك',
       };
     } catch (e) {
       return {
@@ -1103,7 +1072,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// تسجيل معاملة كود الخصم
   Future<void> _recordDiscountTransaction(String code, double amount) async {
     try {
       final userId = authController.currentUser.value?.id;
@@ -1122,100 +1090,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
       logger.w('خطأ في تسجيل معاملة كود الخصم: $e');
     }
   }
-
-  //     decoration: BoxDecoration(
-  //       color: Colors.white,
-  //       borderRadius: BorderRadius.circular(15),
-  //       boxShadow: [
-  //         BoxShadow(
-  //           color: Colors.black.withOpacity(0.1),
-  //           blurRadius: 10,
-  //           offset: const Offset(0, 5),
-  //         ),
-  //       ],
-  //     ),
-  //     child: Column(
-  //       crossAxisAlignment: CrossAxisAlignment.start,
-  //       children: [
-  //         const Text(
-  //           'نظرة عامة على الأرباح',
-  //           style: TextStyle(
-  //             fontSize: 18,
-  //             fontWeight: FontWeight.bold,
-  //           ),
-  //         ),
-  //         const SizedBox(height: 20),
-  //         Row(
-  //           children: [
-  //             Expanded(
-  //               child: _buildEarningOverviewCard(
-  //                 'اليوم',
-  //                 driverController.todayEarnings,
-  //                 Icons.today,
-  //                 Colors.green,
-  //               ),
-  //             ),
-  //             const SizedBox(width: 15),
-  //             Expanded(
-  //               child: _buildEarningOverviewCard(
-  //                 'الأسبوع',
-  //                 driverController.weekEarnings,
-  //                 Icons.date_range,
-  //                 Colors.blue,
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //         const SizedBox(height: 15),
-  //         Row(
-  //           children: [
-  //             Expanded(
-  //               child: _buildEarningOverviewCard(
-  //                 'الشهر',
-  //                 driverController.monthEarnings,
-  //                 Icons.calendar_month,
-  //                 Colors.purple,
-  //               ),
-  //             ),
-  //             const SizedBox(width: 15),
-  //             Expanded(
-  //               child: Container(
-  //                 padding: const EdgeInsets.all(15),
-  //                 decoration: BoxDecoration(
-  //                   color: Colors.orange.withOpacity(0.1),
-  //                   borderRadius: BorderRadius.circular(10),
-  //                   border: Border.all(color: Colors.orange.withOpacity(0.3)),
-  //                 ),
-  //                 child: Column(
-  //                   children: [
-  //                     const Icon(Icons.drive_eta, color: Colors.orange, size: 30),
-  //                     const SizedBox(height: 10),
-  //                     Obx(() => Text(
-  //                       '${driverController.completedTripsToday.value}',
-  //                       style: const TextStyle(
-  //                         fontSize: 20,
-  //                         fontWeight: FontWeight.bold,
-  //                         color: Colors.orange,
-  //                       ),
-  //                     )),
-  //                     const Text(
-  //                       'رحلات اليوم',
-  //                       style: TextStyle(
-  //                         fontSize: 12,
-  //                         color: Colors.grey,
-  //                       ),
-  //                       textAlign: TextAlign.center,
-  //                     ),
-  //                   ],
-  //                 ),
-  //               ),
-  //             ),
-  //           ],
-  //         ),
-  //       ],
-  //     ),
-  //   );
-  // }
 
   Widget _buildQuickActions() {
     return Container(
@@ -1335,7 +1209,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     );
   }
 
-  /// عرض الإحصائيات الحية
   void _showLiveStatistics() {
     Get.dialog(
       AlertDialog(
@@ -1347,9 +1220,9 @@ class _DriverWalletViewState extends State<DriverWalletView> {
             _buildStatisticRow(
                 'إجمالي المعاملات', '${recentTransactions.length} معاملة'),
             _buildStatisticRow('الرصيد الحالي',
-                '${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} ج.م'),
+                '${authController.currentUser.value?.balance.toStringAsFixed(2) ?? '0.00'} د.ع'),
             _buildStatisticRow('أرباح اليوم',
-                '${driverController.todayEarnings.value.toStringAsFixed(2)} ج.م'),
+                '${driverController.todayEarnings.value.toStringAsFixed(2)} د.ع'),
           ],
         ),
         actions: [
@@ -1362,7 +1235,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     );
   }
 
-  /// بناء صف إحصائي
   Widget _buildStatisticRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1378,7 +1250,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     );
   }
 
-  /// تحديث جميع البيانات
   Future<void> _refreshAllData() async {
     try {
       Get.dialog(
@@ -1399,7 +1270,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         _loadDynamicData(),
       ]);
 
-      Get.back(); // إغلاق dialog التحميل
+      Get.back();
       Get.snackbar(
         'نجح',
         'تم تحديث جميع البيانات بنجاح',
@@ -1408,7 +1279,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
         colorText: Colors.white,
       );
     } catch (e) {
-      Get.back(); // إغلاق dialog التحميل
+      Get.back();
       Get.snackbar(
         'خطأ',
         'حدث خطأ أثناء تحديث البيانات',
@@ -1419,7 +1290,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
     }
   }
 
-  /// عرض إحصائيات مفصلة
   void _showDetailedStatistics() {
     Get.bottomSheet(
       Container(
@@ -1470,7 +1340,7 @@ class _DriverWalletViewState extends State<DriverWalletView> {
                     ),
                     _buildDetailedStatCard(
                       'متوسط الرحلة',
-                      '25 ج.م',
+                      '25 د.ع',
                       Icons.trending_up,
                       Colors.orange,
                     ),
@@ -1534,7 +1404,6 @@ class _DriverWalletViewState extends State<DriverWalletView> {
   }
 }
 
-/// تحويل النص إلى أحرف كبيرة
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(

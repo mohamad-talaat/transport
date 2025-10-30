@@ -89,7 +89,7 @@ class _TripHistoryTile extends StatelessWidget {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const Spacer(),
-              Text('${trip.fare.toStringAsFixed(2)} ج.م',
+              Text('${trip.fare.toStringAsFixed(2)} د.ع',
                   style: const TextStyle(
                     color: Color(0xFF10B981),
                     fontWeight: FontWeight.bold,

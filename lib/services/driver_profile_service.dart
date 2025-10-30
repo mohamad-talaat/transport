@@ -1,8 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/models/driver_profile_model.dart';
-import 'package:transport_app/services/image_upload_service.dart';
 import 'package:transport_app/main.dart';
+import 'package:transport_app/services/unified_image_service.dart';
 
 class DriverProfileService extends GetxService {
   static DriverProfileService get to => Get.find();
@@ -10,7 +10,6 @@ class DriverProfileService extends GetxService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImageUploadService _imageUploadService = Get.find<ImageUploadService>();
 
-  /// جلب بروفايل السائق
   Future<DriverProfileModel?> getDriverProfile(String driverId) async {
     try {
       final doc =
@@ -26,7 +25,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// إنشاء بروفايل جديد
   Future<bool> createDriverProfile(DriverProfileModel profile) async {
     try {
       await _firestore
@@ -42,11 +40,10 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// تحديث بروفايل السائق
   Future<bool> updateDriverProfile(DriverProfileModel profile) async {
     try {
       final updatedData = profile.toMap();
-      updatedData['updatedAt'] = Timestamp.now();
+      updatedData['updatedAt'] = FieldValue.serverTimestamp();
 
       await _firestore
           .collection('driver_profiles')
@@ -61,7 +58,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// رفع صورة السيارة
   Future<String?> uploadCarPhoto(dynamic imageFile) async {
     try {
       final fileName = 'car_${DateTime.now().millisecondsSinceEpoch}';
@@ -77,7 +73,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// رفع صورة الرخصة
   Future<String?> uploadLicensePhoto(dynamic imageFile) async {
     try {
       final fileName = 'license_${DateTime.now().millisecondsSinceEpoch}';
@@ -93,10 +88,8 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// التحقق من اكتمال بروفايل السائق
   Future<bool> isProfileComplete(String userId) async {
     try {
-      // جلب بيانات المستخدم
       DocumentSnapshot userDoc =
           await _firestore.collection('users').doc(userId).get();
 
@@ -104,33 +97,26 @@ class DriverProfileService extends GetxService {
 
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // التحقق من حقل isProfileComplete أولاً
       if (userData['isProfileComplete'] == true) {
         return true;
       }
 
-      // التحقق من الحقول المطلوبة للسائق
       final requiredFields = [
         'name',
         'phone',
-        'email',
+        
         'vehicleModel',
         'vehicleColor',
-        'licensePlate',
-        'licenseNumber',
+        'provinceCode',
+        'provinceName',
         'vehicleYear',
         'profileImage',
-        'idCardImage',
-        'licenseImage',
+        'nationalIdImage',
+        'drivingLicenseImage',
         'vehicleImage',
-        'isVerified',
-        'isActive',
-        'serviceArea',
-        'bankAccount',
         'emergencyContact'
       ];
 
-      // التحقق من وجود جميع الحقول المطلوبة
       for (String field in requiredFields) {
         if (!userData.containsKey(field) ||
             userData[field] == null ||
@@ -139,7 +125,6 @@ class DriverProfileService extends GetxService {
         }
       }
 
-      // التحقق من أن السائق مفعل ومتحقق منه
       if (userData['isVerified'] != true || userData['isActive'] != true) {
         return false;
       }
@@ -151,7 +136,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// التحقق من موافقة الإدارة على السائق
   Future<bool> isDriverApproved(String userId) async {
     try {
       DocumentSnapshot userDoc =
@@ -161,7 +145,6 @@ class DriverProfileService extends GetxService {
 
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // التحقق من أن السائق موافق عليه من الإدارة
       return userData['isApproved'] == true;
     } catch (e) {
       logger.w('خطأ في التحقق من موافقة الإدارة: $e');
@@ -169,7 +152,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// الحصول على قائمة الحقول الناقصة
   Future<List<String>> getMissingFields(String userId) async {
     try {
       DocumentSnapshot userDoc =
@@ -180,12 +162,10 @@ class DriverProfileService extends GetxService {
       final userData = userDoc.data() as Map<String, dynamic>;
       final List<String> missingFields = [];
 
-      // التحقق من حقل isProfileComplete أولاً
       if (userData['isProfileComplete'] == true) {
         return [];
       }
 
-      // قائمة الحقول المطلوبة مع أسمائها العربية
       final fieldNames = {
         'name': 'الاسم الكامل',
         'phone': 'رقم الهاتف',
@@ -193,6 +173,7 @@ class DriverProfileService extends GetxService {
         'vehicleModel': 'موديل السيارة',
         'vehicleColor': 'لون السيارة',
         'licensePlate': 'رقم اللوحة',
+        'plateNumber': 'رقم لوحة السيارة',
         'licenseNumber': 'رقم الرخصة',
         'vehicleYear': 'سنة السيارة',
         'profileImage': 'الصورة الشخصية',
@@ -203,10 +184,11 @@ class DriverProfileService extends GetxService {
         'isActive': 'تفعيل الحساب',
         'serviceArea': 'منطقة العمل',
         'bankAccount': 'الحساب البنكي',
-        'emergencyContact': 'جهة اتصال للطوارئ'
+        'emergencyContact': 'جهة اتصال للطوارئ',
+         
+      
       };
 
-      // التحقق من كل حقل
       fieldNames.forEach((field, arabicName) {
         if (!userData.containsKey(field) ||
             userData[field] == null ||
@@ -224,7 +206,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// حساب نسبة اكتمال البروفايل
   Future<double> getProfileCompletionPercentage(String userId) async {
     try {
       DocumentSnapshot userDoc =
@@ -234,7 +215,6 @@ class DriverProfileService extends GetxService {
 
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // التحقق من حقل isProfileComplete أولاً
       if (userData['isProfileComplete'] == true) {
         return 100.0;
       }
@@ -277,56 +257,45 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// تحديث حالة اكتمال البروفايل
   Future<void> updateProfileCompletion(
       String userId, Map<String, dynamic> data) async {
     try {
-      // إضافة حقل isProfileComplete إذا لم يكن موجوداً
       if (!data.containsKey('isProfileComplete')) {
         data['isProfileComplete'] = false;
       }
 
-      // إضافة حقل isRejected إذا لم يكن موجوداً
       if (!data.containsKey('isRejected')) {
         data['isRejected'] = false;
       }
 
-      // إضافة حقل isApproved إذا لم يكن موجوداً
       if (!data.containsKey('isApproved')) {
         data['isApproved'] = false;
       }
 
-      // إضافة حقل isVerified إذا لم يكن موجوداً
       if (!data.containsKey('isVerified')) {
         data['isVerified'] = false;
       }
 
-      // إضافة حقل isActive إذا لم يكن موجوداً
       if (!data.containsKey('isActive')) {
         data['isActive'] = true;
       }
 
-      // إضافة حقل updatedAt إذا لم يكن موجوداً
       if (!data.containsKey('updatedAt')) {
         data['updatedAt'] = DateTime.now();
       }
 
-      // إضافة حقل createdAt إذا لم يكن موجوداً
       if (!data.containsKey('createdAt')) {
         data['createdAt'] = DateTime.now();
       }
 
-      // إضافة حقل userType إذا لم يكن موجوداً
       if (!data.containsKey('userType')) {
         data['userType'] = 'driver';
       }
 
-      // إضافة حقل balance إذا لم يكن موجوداً
       if (!data.containsKey('balance')) {
         data['balance'] = 0.0;
       }
 
-      // إضافة حقل additionalData إذا لم يكن موجوداً
       if (!data.containsKey('additionalData')) {
         data['additionalData'] = {
           'isOnline': false,
@@ -379,7 +348,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// تحديث حالة اكتمال البروفايل
   Future<void> markProfileComplete(String userId) async {
     try {
       await _firestore.collection('users').doc(userId).update({
@@ -394,7 +362,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// تحديث حالة الموافقة على السائق (للأدمن)
   Future<bool> approveDriver(String userId, String adminId) async {
     try {
       await _firestore.collection('users').doc(userId).update({
@@ -412,7 +379,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// رفض السائق (للأدمن)
   Future<bool> rejectDriver(
       String userId, String adminId, String reason) async {
     try {
@@ -431,7 +397,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// جلب السائقين في انتظار المراجعة
   Future<List<Map<String, dynamic>>> getPendingDrivers() async {
     try {
       final querySnapshot = await _firestore
@@ -450,7 +415,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// جلب السائقين الموافق عليهم
   Future<List<Map<String, dynamic>>> getApprovedDrivers() async {
     try {
       final querySnapshot = await _firestore
@@ -468,7 +432,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// جلب السائقين المرفوضين
   Future<List<Map<String, dynamic>>> getRejectedDrivers() async {
     try {
       final querySnapshot = await _firestore
@@ -486,18 +449,14 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// التحقق من إمكانية استقبال الطلبات
   Future<bool> canReceiveRequests(String userId) async {
     try {
-      // التحقق من اكتمال البروفايل
       final isComplete = await isProfileComplete(userId);
       if (!isComplete) return false;
 
-      // التحقق من موافقة الإدارة
       final isApproved = await isDriverApproved(userId);
       if (!isApproved) return false;
 
-      // التحقق من أن السائق متصل ومتاح
       DocumentSnapshot userDoc =
           await _firestore.collection('users').doc(userId).get();
 
@@ -505,7 +464,6 @@ class DriverProfileService extends GetxService {
 
       final userData = userDoc.data() as Map<String, dynamic>;
 
-      // التحقق من أن السائق متصل ومتاح للعمل
       return userData['isOnline'] == true &&
           userData['isAvailable'] == true &&
           userData['isActive'] == true &&
@@ -518,7 +476,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// التحقق من تفعيل بروفايل السائق
   Future<bool> isProfileApproved(String driverId) async {
     try {
       final profile = await getDriverProfile(driverId);
@@ -529,7 +486,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// الحصول على حالة بروفايل السائق
   Future<String> getProfileStatus(String driverId) async {
     try {
       final profile = await getDriverProfile(driverId);
@@ -541,14 +497,13 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// تحديث حالة الموافقة على البروفايل (للأدمن)
   Future<bool> approveDriverProfile(String driverId, String adminId) async {
     try {
       await _firestore.collection('driver_profiles').doc(driverId).update({
         'isApproved': true,
-        'approvedAt': Timestamp.now(),
+        'approvedAt': FieldValue.serverTimestamp(),
         'approvedBy': adminId,
-        'updatedAt': Timestamp.now(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       logger.i('تم تفعيل بروفايل السائق بنجاح');
@@ -559,16 +514,15 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// رفض بروفايل السائق (للأدمن)
   Future<bool> rejectDriverProfile(
       String driverId, String adminId, String reason) async {
     try {
       await _firestore.collection('driver_profiles').doc(driverId).update({
         'isApproved': false,
         'rejectionReason': reason,
-        'rejectedAt': Timestamp.now(),
+        'rejectedAt': FieldValue.serverTimestamp(),
         'rejectedBy': adminId,
-        'updatedAt': Timestamp.now(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       logger.i('تم رفض بروفايل السائق');
@@ -579,7 +533,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// جلب جميع بروفايلات السائقين في انتظار المراجعة
   Future<List<DriverProfileModel>> getPendingProfiles() async {
     try {
       final querySnapshot = await _firestore
@@ -598,7 +551,6 @@ class DriverProfileService extends GetxService {
     }
   }
 
-  /// جلب جميع بروفايلات السائقين المفعلة
   Future<List<DriverProfileModel>> getApprovedProfiles() async {
     try {
       final querySnapshot = await _firestore

@@ -11,12 +11,10 @@ class AppSettingsService extends GetxService {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Observable settings
   final Rx<AppSettingsModel?> currentSettings = Rx<AppSettingsModel?>(null);
   final RxBool isLoading = false.obs;
   final RxBool isUpdating = false.obs;
 
-  // Stream subscription
   StreamSubscription<DocumentSnapshot>? _settingsSubscription;
 
   Future<AppSettingsService> init() async {
@@ -25,39 +23,53 @@ class AppSettingsService extends GetxService {
     return this;
   }
 
-  /// تحميل الإعدادات من قاعدة البيانات
   Future<void> _loadSettings() async {
     try {
       isLoading.value = true;
 
-      DocumentSnapshot doc = await _firestore
+      // جلب الإعدادات العامة
+      DocumentSnapshot mainDoc = await _firestore
           .collection('app_settings')
           .doc('main_settings')
           .get();
 
-      if (doc.exists) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
+      // جلب إعدادات الأسعار
+      DocumentSnapshot pricingDoc = await _firestore
+          .collection('app_settings')
+          .doc('pricing')
+          .get();
+
+      Map<String, dynamic> data = {};
+      
+      if (mainDoc.exists) {
+        data = mainDoc.data() as Map<String, dynamic>;
+        data['id'] = mainDoc.id;
+      }
+
+      // دمج إعدادات الأسعار إذا كانت موجودة
+      if (pricingDoc.exists) {
+        final pricingData = pricingDoc.data() as Map<String, dynamic>;
+        data['baseFare'] = pricingData['baseFare'] ?? data['baseFare'] ?? 2000.0;
+        data['perKmRate'] = pricingData['pricePerKm'] ?? data['perKmRate'] ?? 800.0;
+        data['minimumFare'] = pricingData['minimumFare'] ?? data['minimumFare'] ?? 3000.0;
+        data['plusTripSurcharge'] = pricingData['plusTripFee'] ?? 1000.0;
+        data['additionalStopCost'] = pricingData['additionalStopFee'] ?? 1000.0;
+        data['waitingMinuteCost'] = pricingData['waitingTimeFeePerMinute'] ?? 50.0;
+        data['roundTripMultiplier'] = pricingData['roundTripMultiplier'] ?? 1.8;
+      }
+
+      if (data.isNotEmpty) {
         currentSettings.value = AppSettingsModel.fromMap(data);
       } else {
-        // إنشاء إعدادات افتراضية إذا لم تكن موجودة
         await _createDefaultSettings();
       }
     } catch (e) {
       logger.e('خطأ في تحميل الإعدادات: $e');
-      Get.snackbar(
-        'خطأ',
-        'تعذر تحميل إعدادات التطبيق',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
     } finally {
       isLoading.value = false;
     }
   }
 
-  /// إنشاء إعدادات افتراضية
   Future<void> _createDefaultSettings() async {
     try {
       AppSettingsModel defaultSettings = AppSettingsModel(
@@ -85,24 +97,51 @@ class AppSettingsService extends GetxService {
     }
   }
 
-  /// الاستماع لتغييرات الإعدادات
   void _listenToSettingsChanges() {
     _settingsSubscription?.cancel();
 
+    // الاستماع للتغييرات في إعدادات الأسعار
     _settingsSubscription = _firestore
         .collection('app_settings')
-        .doc('main_settings')
+        .doc('pricing')
         .snapshots()
-        .listen((snapshot) {
-      if (snapshot.exists) {
-        Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-        data['id'] = snapshot.id;
-        currentSettings.value = AppSettingsModel.fromMap(data);
+        .listen((pricingSnapshot) async {
+      try {
+        // جلب الإعدادات العامة
+        DocumentSnapshot mainSnapshot = await _firestore
+            .collection('app_settings')
+            .doc('main_settings')
+            .get();
+
+        Map<String, dynamic> data = {};
+        
+        if (mainSnapshot.exists) {
+          data = mainSnapshot.data() as Map<String, dynamic>;
+          data['id'] = mainSnapshot.id;
+        }
+
+        // دمج إعدادات الأسعار
+        if (pricingSnapshot.exists) {
+          final pricingData = pricingSnapshot.data() as Map<String, dynamic>;
+          data['baseFare'] = pricingData['baseFare'] ?? data['baseFare'] ?? 2000.0;
+          data['perKmRate'] = pricingData['pricePerKm'] ?? data['perKmRate'] ?? 800.0;
+          data['minimumFare'] = pricingData['minimumFare'] ?? data['minimumFare'] ?? 3000.0;
+          data['plusTripSurcharge'] = pricingData['plusTripFee'] ?? 1000.0;
+          data['additionalStopCost'] = pricingData['additionalStopFee'] ?? 1000.0;
+          data['waitingMinuteCost'] = pricingData['waitingTimeFeePerMinute'] ?? 50.0;
+          data['roundTripMultiplier'] = pricingData['roundTripMultiplier'] ?? 1.8;
+        }
+
+        if (data.isNotEmpty) {
+          currentSettings.value = AppSettingsModel.fromMap(data);
+          logger.i('تم تحديث إعدادات الأسعار');
+        }
+      } catch (e) {
+        logger.e('خطأ في الاستماع للتغييرات: $e');
       }
     });
   }
 
-  /// تحديث الإعدادات
   Future<bool> updateSettings({
     double? baseFare,
     double? perKmRate,
@@ -163,7 +202,6 @@ class AppSettingsService extends GetxService {
     }
   }
 
-  /// إضافة محافظة مدعومة
   Future<bool> addSupportedGovernorate(String governorate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -177,7 +215,6 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// إزالة محافظة من المدعومة
   Future<bool> removeSupportedGovernorate(String governorate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -191,7 +228,6 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// إضافة محافظة غير مدعومة
   Future<bool> addUnsupportedGovernorate(String governorate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -205,7 +241,6 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// إزالة محافظة من غير المدعومة
   Future<bool> removeUnsupportedGovernorate(String governorate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -219,7 +254,6 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// تحديث سعر محافظة معينة
   Future<bool> updateGovernorateRate(String governorate, double rate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -234,7 +268,6 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// إزالة سعر خاص لمحافظة
   Future<bool> removeGovernorateRate(String governorate,
       {String? updatedBy}) async {
     if (currentSettings.value == null) return false;
@@ -249,32 +282,40 @@ class AppSettingsService extends GetxService {
     );
   }
 
-  /// حساب السعر بناءً على المسافة والمحافظة
   double calculateFare(double distanceKm, String? governorate) {
     if (currentSettings.value == null) {
-      // إعدادات افتراضية إذا لم تكن محملة
       return 10.0 + (distanceKm * 3.0);
     }
 
     return currentSettings.value!.calculateFare(distanceKm, governorate);
   }
 
-  // عمولة التطبيق من السائق حسب المسافة (د.ع)
-  int commissionIqD(double distanceKm) {
-    return distanceKm <= 10.0 ? 250 : 500;
+  /// ✅ حساب العمولة بناءً على سعر الرحلة (وليس المسافة)
+  int calculateCommission(double tripFare) {
+    if (currentSettings.value == null) {
+      return 250; // قيمة افتراضية
+    }
+    return currentSettings.value!.calculateAdminCommission(tripFare);
   }
 
-  // حد الدين الأعظمي على السائق لإيقاف استقبال الرحلات (د.ع)
-  int get driverDebtLimitIqD => 15000;
+  /// ✅ حد ديون السائق من الإعدادات
+  int get driverDebtLimitIqD => currentSettings.value?.driverDebtLimitIqD ?? 15000;
 
-  /// التحقق من دعم المحافظة
+  /// ✅ مضاعف وقت الذروة
+  double get rushHourMultiplier => currentSettings.value?.rushHourMultiplier ?? 1.2;
+
+  /// ✅ هل الذروة التلقائية مفعلة؟
+  bool get isAutoRushEnabled => currentSettings.value?.autoRushEnabled ?? false;
+
+  /// ✅ عدد الطلبات لتفعيل الذروة
+  int get autoRushThreshold => currentSettings.value?.autoRushThreshold ?? 50;
+
   bool isGovernorateSupported(String governorate) {
-    if (currentSettings.value == null) return true; // افتراضياً مدعومة
+    if (currentSettings.value == null) return true;
 
     return currentSettings.value!.isGovernorateSupported(governorate);
   }
 
-  /// الحصول على قائمة المحافظات المدعومة
   List<String> getSupportedGovernorates() {
     if (currentSettings.value == null) {
       return IraqiGovernorates.defaultSupported;
@@ -283,7 +324,6 @@ class AppSettingsService extends GetxService {
     return currentSettings.value!.supportedGovernorates;
   }
 
-  /// الحصول على قائمة المحافظات غير المدعومة
   List<String> getUnsupportedGovernorates() {
     if (currentSettings.value == null) {
       return IraqiGovernorates.defaultUnsupported;
@@ -292,7 +332,6 @@ class AppSettingsService extends GetxService {
     return currentSettings.value!.unsupportedGovernorates;
   }
 
-  /// إعادة تعيين الإعدادات إلى الافتراضية
   Future<bool> resetToDefaults({String? updatedBy}) async {
     return await updateSettings(
       baseFare: 10.0,

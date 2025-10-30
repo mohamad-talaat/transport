@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:transport_app/controllers/trip_controller.dart';
 import 'package:transport_app/routes/app_routes.dart';
 
+import '../../main.dart';
+
 class TripCancellationReasonsView extends StatefulWidget {
   const TripCancellationReasonsView({super.key});
 
@@ -78,47 +80,30 @@ class _TripCancellationReasonsViewState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      // appBar: AppBar(
-      //   title: const Text(
-      //     'سبب إلغاء الرحلة',
-      //     style: TextStyle(
-      //       fontWeight: FontWeight.bold,
-      //       color: Colors.white,
-      //     ),
-      //   ),
-      //   backgroundColor: Colors.red,
-      //   elevation: 0,
-      //   centerTitle: true,
-      //   leading: IconButton(
-      //     icon: const Icon(Icons.arrow_back, color: Colors.white),
-      //     onPressed: () => Get.back(),
-      //   ),
-      // ),
       body: Column(
         children: [
-          // Header
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.orange[700],
-              borderRadius: BorderRadius.only(
+              borderRadius: const BorderRadius.only(
                 bottomLeft: Radius.circular(30),
                 bottomRight: Radius.circular(30),
               ),
             ),
-            child: Column(
+            child: const Column(
               children: [
                 SizedBox(
                   height: 20,
                 ),
-                const Icon(
+                Icon(
                   Icons.cancel_outlined,
                   size: 60,
                   color: Colors.white,
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: 16),
+                Text(
                   'لماذا تريد إلغاء الرحلة؟',
                   style: TextStyle(
                     fontSize: 20,
@@ -127,8 +112,8 @@ class _TripCancellationReasonsViewState
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   'اختر السبب الذي يوضح لماذا تريد إلغاء هذه الرحلة',
                   style: TextStyle(
                     fontSize: 14,
@@ -139,8 +124,6 @@ class _TripCancellationReasonsViewState
               ],
             ),
           ),
-
-          // Reasons List
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
@@ -180,7 +163,6 @@ class _TripCancellationReasonsViewState
                         ),
                         child: Row(
                           children: [
-                            // Icon
                             Container(
                               width: 50,
                               height: 50,
@@ -198,8 +180,6 @@ class _TripCancellationReasonsViewState
                               ),
                             ),
                             const SizedBox(width: 16),
-
-                            // Content
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,13 +207,11 @@ class _TripCancellationReasonsViewState
                                 ],
                               ),
                             ),
-
-                            // Selection indicator
                             if (isSelected)
                               Container(
                                 width: 24,
                                 height: 24,
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: Colors.red,
                                   shape: BoxShape.circle,
                                 ),
@@ -261,8 +239,6 @@ class _TripCancellationReasonsViewState
               },
             ),
           ),
-
-          // Bottom Actions
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -277,13 +253,12 @@ class _TripCancellationReasonsViewState
             ),
             child: Column(
               children: [
-                // Cancel Trip Button (only visible when reason is selected)
                 if (selectedReason != null)
                   Container(
                     width: double.infinity,
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ElevatedButton(
-                      onPressed: isCancelling ? null : _cancelTrip,
+onPressed: isCancelling ? null : () => _cancelTrip(selectedReason!),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
@@ -312,8 +287,6 @@ class _TripCancellationReasonsViewState
                             ),
                     ),
                   ),
-
-                // Back Button
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton(
@@ -343,7 +316,7 @@ class _TripCancellationReasonsViewState
     );
   }
 
-  Future<void> _cancelTrip() async {
+  Future<void> _cancelTrip(reasonText) async {
     if (selectedReason == null) return;
 
     setState(() {
@@ -354,22 +327,33 @@ class _TripCancellationReasonsViewState
       final reason = cancellationReasons
           .firstWhere((r) => r['id'] == selectedReason)['title']!;
 
-      await tripController.cancelTripWithReason(reason);
+      // await tripController.cancelTripWithReason(reason);
+  // --- هذا هو التعديل المطلوب ---
+    await tripController.cancelTrip(reason: reasonText);
+    // -----------------------------
+      await Future.delayed(const Duration(milliseconds: 800));
 
-      // Navigate back to home
-      Get.offAllNamed(AppRoutes.RIDER_HOME);
+      if (mounted) {
+        Get.until((route) => route.settings.name == AppRoutes.RIDER_HOME);
+      }
     } catch (e) {
-      Get.snackbar(
-        'خطأ',
-        'تعذر إلغاء الرحلة، يرجى المحاولة مرة أخرى',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Colors.red,
-        colorText: Colors.white,
-      );
+      logger.e('خطأ في إلغاء الرحلة: $e');
+      if (mounted) {
+        Get.snackbar(
+          'خطأ',
+          'تعذر إلغاء الرحلة، يرجى المحاولة مرة أخرى',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+      }
     } finally {
-      setState(() {
-        isCancelling = false;
-      });
+      if (mounted) {
+        setState(() {
+          isCancelling = false;
+        });
+      }
     }
   }
 }

@@ -4,8 +4,8 @@ import 'package:get/get.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
-import 'package:transport_app/services/image_upload_service.dart';
-import 'package:transport_app/main.dart'; // Assuming main.dart contains your logger instance
+import 'package:transport_app/main.dart';
+import 'package:transport_app/services/unified_image_service.dart';
 
 class RiderProfileView extends StatefulWidget {
   const RiderProfileView({super.key});
@@ -21,9 +21,9 @@ class _RiderProfileViewState extends State<RiderProfileView> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController(); // غالباً للعرض فقط، التعديل على الإيميل يتطلب إعادة مصادقة
+  final TextEditingController _emailController = TextEditingController();
 
-  bool _isLoading = false; // يستخدم لحالة الحفظ أو رفع الصورة
+  bool _isLoading = false;
   String? _profileImage;
 
   @override
@@ -37,7 +37,7 @@ class _RiderProfileViewState extends State<RiderProfileView> {
     if (user != null) {
       _nameController.text = user.name.trim();
       _phoneController.text = user.phone.trim();
-      _emailController.text = user.email.trim(); // لعرض الإيميل
+      _emailController.text = user.email.trim();
       _profileImage = user.profileImage;
     }
   }
@@ -60,7 +60,7 @@ class _RiderProfileViewState extends State<RiderProfileView> {
         maxHeight: 1024,
       );
 
-      if (image == null) return; // المستخدم لغى الاختيار
+      if (image == null) return;
 
       setState(() => _isLoading = true);
 
@@ -155,10 +155,9 @@ class _RiderProfileViewState extends State<RiderProfileView> {
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
         'profileImage': _profileImage,
-        'updatedAt': Timestamp.now(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // تحديث كائن المستخدم المحلي في AuthController
       final current = _authController.currentUser.value!;
       _authController.currentUser.value = current.copyWith(
         name: _nameController.text.trim(),
@@ -175,7 +174,6 @@ class _RiderProfileViewState extends State<RiderProfileView> {
         duration: const Duration(seconds: 2),
       );
 
-      // العودة للصفحة السابقة بعد الحفظ
       Future.delayed(const Duration(seconds: 2), () {
         Get.back();
       });
@@ -194,7 +192,6 @@ class _RiderProfileViewState extends State<RiderProfileView> {
     }
   }
 
-  // Helper widget for image picker, copied from RiderProfileCompletionView
   Widget _buildImagePicker(String title, String? currentImage) {
     return Card(
       elevation: 2,
@@ -235,7 +232,8 @@ class _RiderProfileViewState extends State<RiderProfileView> {
                                   ),
                                 );
                               },
-                              loadingBuilder: (context, child, loadingProgress) {
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
                                 if (loadingProgress == null) return child;
                                 return Container(
                                   color: Colors.grey.shade200,
@@ -273,13 +271,17 @@ class _RiderProfileViewState extends State<RiderProfileView> {
               label: Text(
                 _isLoading && _imageService.isUploading.value
                     ? 'جاري الرفع...'
-                    : (currentImage != null ? 'تغيير الصورة' : 'رفع صورة شخصية'),
+                    : (currentImage != null
+                        ? 'تغيير الصورة'
+                        : 'رفع صورة شخصية'),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: currentImage != null ? Colors.orange : Colors.blue,
+                backgroundColor:
+                    currentImage != null ? Colors.orange : Colors.blue,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
             ),
           ],
@@ -308,16 +310,13 @@ class _RiderProfileViewState extends State<RiderProfileView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Image section
                 _buildImagePicker('صورة الملف الشخصي', _profileImage),
                 const SizedBox(height: 16),
-
                 const Text(
                   'البيانات الأساسية',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: _nameController,
                   decoration: const InputDecoration(
@@ -327,12 +326,13 @@ class _RiderProfileViewState extends State<RiderProfileView> {
                   ),
                   validator: (value) {
                     if (value?.isEmpty ?? true) return 'يرجى إدخال الاسم';
-                    if (value!.trim().length < 3) return 'الاسم يجب أن يكون 3 أحرف على الأقل';
+                    if (value!.trim().length < 3) {
+                      return 'الاسم يجب أن يكون 3 أحرف على الأقل';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 8),
-
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
@@ -346,16 +346,16 @@ class _RiderProfileViewState extends State<RiderProfileView> {
                     if (value?.isEmpty ?? true) {
                       return 'يرجى إدخال رقم الهاتف';
                     }
-                    if (value!.trim().length < 9) return 'رقم الهاتف يجب أن يكون 9 أرقام على الأقل';
+                    if (value!.trim().length < 9) {
+                      return 'رقم الهاتف يجب أن يكون 9 أرقام على الأقل';
+                    }
                     return null;
                   },
                 ),
                 const SizedBox(height: 8),
-
-                // Email field (read-only)
                 TextFormField(
                   controller: _emailController,
-                  readOnly: true, // Email is typically read-only
+                  readOnly: true,
                   decoration: const InputDecoration(
                     labelText: 'البريد الإلكتروني',
                     border: OutlineInputBorder(),
@@ -363,10 +363,7 @@ class _RiderProfileViewState extends State<RiderProfileView> {
                   ),
                   style: const TextStyle(color: Colors.grey),
                 ),
-
                 const SizedBox(height: 32),
-
-                // Save Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -387,13 +384,12 @@ class _RiderProfileViewState extends State<RiderProfileView> {
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // Logout Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : () => _authController.signOut(),
+                    onPressed:
+                        _isLoading ? null : () => _authController.signOut(),
                     icon: const Icon(Icons.logout),
                     label: const Text('تسجيل الخروج'),
                     style: ElevatedButton.styleFrom(

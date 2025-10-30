@@ -26,7 +26,6 @@ class LocationPermissionScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // العنوان
               const Text(
                 'السماح لـ "تكسي البصرة" باستخدام موقعك؟',
                 style: TextStyle(
@@ -35,10 +34,7 @@ class LocationPermissionScreen extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              
               const SizedBox(height: 12),
-              
-              // النص التوضيحي
               const Text(
                 'نحن بحاجة إلى موقعك لنقدم لك سيارات الأجرة القريبة ونقطة التقاط دقيقة',
                 style: TextStyle(
@@ -47,10 +43,7 @@ class LocationPermissionScreen extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              
               const SizedBox(height: 20),
-              
-              // خريطة صغيرة (محاكاة)
               Container(
                 height: 120,
                 decoration: BoxDecoration(
@@ -60,7 +53,6 @@ class LocationPermissionScreen extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    // خلفية الخريطة
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(8),
@@ -74,8 +66,6 @@ class LocationPermissionScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    
-                    // نقاط عشوائية لمحاكاة الخريطة
                     Positioned(
                       top: 20,
                       left: 30,
@@ -112,8 +102,6 @@ class LocationPermissionScreen extends StatelessWidget {
                         ),
                       ),
                     ),
-                    
-                    // أيقونة الخريطة في الوسط
                     const Center(
                       child: Icon(
                         Icons.map,
@@ -121,8 +109,6 @@ class LocationPermissionScreen extends StatelessWidget {
                         color: Colors.green,
                       ),
                     ),
-                    
-                    // أيقونة الموقع
                     const Positioned(
                       bottom: 10,
                       right: 10,
@@ -135,10 +121,7 @@ class LocationPermissionScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              
               const SizedBox(height: 20),
-              
-              // أزرار الإذن
               Column(
                 children: [
                   _buildPermissionButton(
@@ -160,10 +143,7 @@ class LocationPermissionScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              
               const SizedBox(height: 16),
-              
-              // قسم الوجهة
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -182,9 +162,7 @@ class LocationPermissionScreen extends StatelessWidget {
                         color: Colors.black87,
                       ),
                     ),
-                    
                     const SizedBox(height: 12),
-                    
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -245,8 +223,8 @@ class LocationPermissionScreen extends StatelessWidget {
   }
 
   void _handlePermission(String type) {
-    Get.back(); // إغلاق النافذة
-    
+    Get.back();
+
     switch (type) {
       case 'once':
       case 'while_using':

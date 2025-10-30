@@ -1,50 +1,226 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // قاعدة عامة: المستخدمون يمكنهم قراءة وكتابة بياناتهم الخاصة فقط
+    
+    // ============================================
+    // 🔧 Helper Functions
+    // ============================================
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+    
+    function isDriver(driverId) {
+      return isAuth() && request.auth.uid == driverId;
+    }
+    
+    function canAcceptTrips(driverId) {
+      let driverDoc = get(/databases/$(database)/documents/users/$(driverId));
+      return driverDoc.data.additionalData.debtIqD < 15000;
+    }
+    
+    function isAdmin() {
+      return isAuth() && 
+             exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    
+    // ============================================
+    // 👥 Users Collection
+    // ============================================
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isAuth() || isAdmin();
+      allow create: if isAuth() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
     }
     
-    // قاعدة للرحلات: المستخدمون يمكنهم قراءة وكتابة الرحلات الخاصة بهم
+    // ============================================
+    // 🚗 Drivers Collection (Deprecated - merged with users)
+    // ============================================
+    match /drivers/{driverId} {
+      allow read: if isAuth() || isAdmin();
+      allow create: if isAuth() && request.auth.uid == driverId;
+      allow update: if isDriver(driverId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 🚕 Trips Collection
+    // ============================================
     match /trips/{tripId} {
-      allow read, write: if request.auth != null && 
-        (resource.data.riderId == request.auth.uid || 
-         resource.data.driverId == request.auth.uid);
+      allow read: if isAuth() && (
+        resource.data.riderId == request.auth.uid ||
+        resource.data.driverId == request.auth.uid
+      ) || isAdmin();
+      
+      allow create: if isAuth() || isAdmin();
+      
+      allow update: if isAuth() && (
+        resource.data.riderId == request.auth.uid ||
+        (request.resource.data.status == 'accepted' &&
+         resource.data.status == 'pending' &&
+         canAcceptTrips(request.auth.uid)) ||
+        (resource.data.driverId == request.auth.uid &&
+         resource.data.status in ['accepted', 'driverArrived', 'inProgress'])
+      ) || isAdmin();
+      
+      allow delete: if isAdmin();
     }
     
-    // قاعدة للإشعارات: المستخدمون يمكنهم قراءة وكتابة إشعاراتهم
+    // ============================================
+    // 📋 Trip Requests Collection
+    // ============================================
+    match /trip_requests/{requestId} {
+      // ✅ السائقين محتاجين يقروا الطلبات قبل ما يسجلوا دخول
+      allow read: if isAuth();
+      
+      allow create: if isAuth() || isAdmin();
+      
+      allow update: if (isAuth() && 
+                       resource.data.driverId == request.auth.uid &&
+                       resource.data.status == 'pending') || isAdmin();
+      
+      allow delete: if isAuth() || isAdmin();
+    }
+    
+    // ============================================
+    // 💬 Trip Chats Collection
+    // ============================================
+    match /trip_chats/{chatId} {
+      allow read: if isAuth() || isAdmin();
+      allow create: if isAuth();
+      allow update: if isAuth() || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 🔔 Notifications Collection
+    // ============================================
     match /notifications/{notificationId} {
-      allow read, write: if request.auth != null && 
-        resource.data.userId == request.auth.uid;
+      allow read: if (isAuth() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isAuth() || isAdmin();
+      allow update: if (isAuth() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow delete: if (isAuth() && resource.data.userId == request.auth.uid) || isAdmin();
     }
     
-    // قاعدة للمحافظ: المستخدمون يمكنهم قراءة وكتابة محافظهم
+    // ============================================
+    // 💰 Wallets Collection
+    // ============================================
     match /wallets/{walletId} {
-      allow read, write: if request.auth != null && 
-        walletId == request.auth.uid;
+      allow read: if (isAuth() && walletId == request.auth.uid) || isAdmin();
+      allow write: if (isAuth() && walletId == request.auth.uid) || isAdmin();
     }
     
-    // قاعدة للمعاملات: المستخدمون يمكنهم قراءة وكتابة معاملاتهم
+    // ============================================
+    // 💳 Transactions Collection
+    // ============================================
     match /transactions/{transactionId} {
-      allow read, write: if request.auth != null && 
-        (resource.data.userId == request.auth.uid || 
-         resource.data.fromUserId == request.auth.uid || 
-         resource.data.toUserId == request.auth.uid);
+      allow read: if (isAuth() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toUserId == request.auth.uid
+      )) || isAdmin();
+      
+      allow create: if isAuth() || isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
     
-    // قاعدة للمراكز: يمكن للجميع قراءة مراكز الخدمة
+    // ============================================
+    // 🏢 Service Centers Collection
+    // ============================================
     match /serviceCenters/{centerId} {
       allow read: if true;
-      allow write: if request.auth != null && 
-        request.auth.token.admin == true;
+      allow write: if isAdmin();
     }
     
-    // قاعدة للإعدادات العامة: يمكن للجميع قراءة الإعدادات العامة
-    match /appSettings/{settingId} {
-      allow read: if true;
-      allow write: if request.auth != null && 
-        request.auth.token.admin == true;
+    // ============================================
+    // ⚙️ App Settings Collection (مهم جداً - قراءة للجميع)
+    // ============================================
+    match /app_settings/{document=**} {
+      allow read: if true; // ✅ أي حد يقدر يقرأ الإعدادات
+      allow write: if isAdmin();
+    }
+    
+    // ============================================
+    // 🎫 Discount Codes Collection
+    // ============================================
+    match /discountCodes/{codeId} {
+      allow read: if isAuth() || isAdmin();
+      allow write: if isAdmin();
+    }
+    
+    // ============================================
+    // 🎟️ Vouchers Collection
+    // ============================================
+    match /vouchers/{voucherId} {
+      allow read: if isAuth() || isAdmin();
+      allow create: if isAuth();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // ⭐ Trip Ratings Collection
+    // ============================================
+    match /trip_ratings/{ratingId} {
+      allow read: if isAuth() || isAdmin();
+      allow create: if isAuth();
+      allow update: if (isAuth() && resource.data.riderId == request.auth.uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================
+    // 👑 Admins Collection
+    // ============================================
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    
+    // ============================================
+    // 📊 Admin Actions Log
+    // ============================================
+    match /adminActions/{actionId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if false;
+      allow delete: if false;
+    }
+    
+    // ============================================
+    // 🧪 Test Collection
+    // ============================================
+    match /test/{docId} {
+      allow read, write: if isAuth() || isAdmin();
+    }
+    
+    // ============================================
+    // 🚫 منع الوصول لأي collection آخر
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
+
+// ============================================
+// 📝 ملاحظات مهمة
+// ============================================
+// ✅ app_settings متاحة للقراءة بدون تسجيل دخول
+// ✅ trip_requests متاحة للقراءة لأي مستخدم مسجل
+// ✅ الأدمن لديه صلاحيات كاملة على جميع Collections
+// ✅ Transactions آمنة - الأدمن فقط يمكنه التعديل
+// 
+// Required Firestore Indexes:
+// - trips: riderId (ASC), status (ASC)
+// - trips: driverId (ASC), status (ASC)
+// - trip_requests: tripId (ASC), status (ASC)
+// - trip_requests: driverId (ASC), status (ASC)
+// - trip_requests: expiresAt (ASC), status (ASC)  ← مهم للـ cleanup
+// - notifications: userId (ASC), createdAt (DESC)
+// - transactions: userId (ASC), createdAt (DESC)
+// ============================================

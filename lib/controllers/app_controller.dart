@@ -1,48 +1,56 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:get_storage/get_storage.dart';
- import 'package:transport_app/main.dart';
+import 'package:transport_app/main.dart';
+import 'package:transport_app/models/notification_model.dart';
+import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/location_service.dart';
-import 'package:transport_app/services/notification_service.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
+import 'package:transport_app/services/notification/notification_service.dart';
+import 'package:transport_app/views/common/chat_service/communication_service.dart';
+// نوع الإشعار
+// enum NotificationType { tripRequest, chatMessage }
 
 class AppController extends GetxController {
   static AppController get to => Get.find();
+  final Rx<RemoteMessage?> latestNotification = Rx<RemoteMessage?>(null);
+  final Rx<NotificationType?> latestNotificationType =
+      Rx<NotificationType?>(null);
+  DateTime? _lastTripNotificationTime;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
-  // حالة التطبيق العامة
   final RxBool isLoading = false.obs;
   final RxString loadingMessage = ''.obs;
-  
-  // اتصال الإنترنت
+
   final RxBool isConnected = true.obs;
   final Rx<ConnectivityResult> connectionType = ConnectivityResult.none.obs;
-   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
-  // إعدادات التطبيق
   final RxBool isDarkMode = false.obs;
   final Rx<Locale> currentLocale = const Locale('ar', 'EG').obs;
   final RxString currentLanguage = 'ar'.obs;
-  
-  // حالة التطبيق في الخلفية
+
   final RxBool isInBackground = false.obs;
   final RxInt backgroundDuration = 0.obs;
   Timer? _backgroundTimer;
-  
-  // إعدادات التنبيهات والأصوات
+
   final RxBool soundsEnabled = true.obs;
   final RxBool vibrationsEnabled = true.obs;
   final RxBool notificationsEnabled = true.obs;
-  
-  // معلومات التطبيق
+
   final RxString appVersion = '1.0.0'.obs;
   final RxString buildNumber = '1'.obs;
-  
-  // حالة الصيانة والتحديث
+
   final RxBool isUnderMaintenance = false.obs;
   final RxBool hasUpdate = false.obs;
+  
+  // 🔥 Developer Mode (for debugging)
+  final RxBool isDeveloperMode = false.obs;
   final RxBool isUpdateRequired = false.obs;
   final RxString updateUrl = ''.obs;
 
@@ -52,15 +60,15 @@ class AppController extends GetxController {
     _initializeApp();
   }
 
-  /// تهيئة التطبيق
   Future<void> _initializeApp() async {
     try {
       showLoading('جاري تهيئة التطبيق...');
-      
+      _setupFCMListeners();
+
       await _loadAppSettings();
       await _initConnectivity();
       await _checkAppStatus();
-      
+
       hideLoading();
     } catch (e) {
       hideLoading();
@@ -68,19 +76,114 @@ class AppController extends GetxController {
     }
   }
 
-  /// تحميل إعدادات التطبيق
+  void _setupFCMListeners() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // Foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      _handleIncomingNotification(message);
+    });
+
+    // Background / terminated -> فتح التطبيق عند الضغط على الإشعار
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _handleNotificationNavigation(message);
+    });
+
+    // Initial message (لو التطبيق كان مغلق)
+    RemoteMessage? initialMessage = await messaging.getInitialMessage();
+    if (initialMessage != null) {
+      _handleNotificationNavigation(initialMessage);
+    }
+  }
+
+  void _handleIncomingNotification(RemoteMessage message) {
+    final data = message.data;
+
+    // مثال: نوع الإشعار
+    final type = data['type'] ?? 'unknown';
+    if (type == 'trip') {
+      _showTripNotification();
+    } else if (type == 'chat') {
+      _showChatNotification(data);
+    }
+
+    // تحديث الـ Stream
+    latestNotification.value = message;
+    latestNotificationType.value = type == 'trip'
+        ? NotificationType.tripRequested
+        : NotificationType.chatMessage;
+  }
+
+  void _showTripNotification() {
+    final now = DateTime.now();
+    if (_lastTripNotificationTime != null &&
+        now.difference(_lastTripNotificationTime!).inSeconds < 5) return;
+    _lastTripNotificationTime = now;
+
+    if (!Get.isSnackbarOpen) {
+      Get.snackbar(
+        '🚗 طلب رحلة جديد!',
+        'لديك رحلة جديدة',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.green.shade600,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+        margin: const EdgeInsets.all(16),
+        borderRadius: 12,
+        icon: const Icon(Icons.directions_car, color: Colors.white),
+        shouldIconPulse: true,
+        onTap: (_) => Get.offAllNamed(AppRoutes.DRIVER_HOME),
+      );
+    }
+
+    _playSound();
+  }
+
+  void _showChatNotification(Map<String, dynamic> data) {
+    // هنا نفترض انه المستخدم خارج الشات الحالي
+    final currentOpenChatId =
+        Get.find<CommunicationService>().currentOpenChatId;
+    if (currentOpenChatId != data['chatId']) {
+      // إشعار صوتي فقط، ممكن تضيف Snackbar أو أي UI إضافي
+      _playSound();
+    }
+  }
+
+  Future<void> _playSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/message.mp3'));
+      logger.w('🔊 تم تشغيل صوت الإشعار');
+    } catch (e) {
+      logger.w('⚠️ خطأ أثناء تشغيل الصوت: $e');
+    }
+  }
+
+  void _handleNotificationNavigation(RemoteMessage message) {
+    final data = message.data;
+    final type = data['type'] ?? 'unknown';
+
+    if (type == 'trip') {
+      // فتح صفحة الهوم للسائق مباشرة
+      Get.offAllNamed('/driverHome');
+    } else if (type == 'chat') {
+      // فتح صفحة الشات إذا حابب
+      final chatId = data['chatId'];
+      if (chatId != null) {
+        Get.toNamed('/chat', arguments: {'chatId': chatId});
+      }
+    }
+  }
+
   Future<void> _loadAppSettings() async {
     try {
       final box = GetStorage();
-      
-      // تحميل الإعدادات
+
       isDarkMode.value = box.read('dark_mode') ?? false;
       currentLanguage.value = box.read('language') ?? 'ar';
       soundsEnabled.value = box.read('sounds_enabled') ?? true;
       vibrationsEnabled.value = box.read('vibrations_enabled') ?? true;
       notificationsEnabled.value = box.read('notifications_enabled') ?? true;
-      
-      // تطبيق اللغة
+
       if (currentLanguage.value == 'ar') {
         currentLocale.value = const Locale('ar', 'EG');
         Get.updateLocale(const Locale('ar', 'EG'));
@@ -88,54 +191,46 @@ class AppController extends GetxController {
         currentLocale.value = const Locale('en', 'US');
         Get.updateLocale(const Locale('en', 'US'));
       }
-      
-      // تطبيق الثيم
+
       _applyTheme();
-      
     } catch (e) {
       logger.i('خطأ في تحميل الإعدادات: $e');
     }
   }
 
-/// تهيئة مراقب الاتصال
-Future<void> _initConnectivity() async {
-  try {
-    // فحص الاتصال الحالي
-    final results = await Connectivity().checkConnectivity();
-    final current = results.isNotEmpty ? results.first : ConnectivityResult.none;
+  Future<void> _initConnectivity() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      final current =
+          results.isNotEmpty ? results.first : ConnectivityResult.none;
 
-    connectionType.value = current;
-    isConnected.value = current != ConnectivityResult.none;
+      connectionType.value = current;
+      isConnected.value = current != ConnectivityResult.none;
 
-    // مراقبة تغيرات الاتصال
-    _connectivitySubscription = Connectivity()
-        .onConnectivityChanged
-        .listen((List<ConnectivityResult> results) {
-      final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
-      _onConnectivityChanged(result);
-    });
-  } catch (e) {
-    logger.i('خطأ في مراقبة الاتصال: $e');
+      _connectivitySubscription = Connectivity()
+          .onConnectivityChanged
+          .listen((List<ConnectivityResult> results) {
+        final result =
+            results.isNotEmpty ? results.first : ConnectivityResult.none;
+        _onConnectivityChanged(result);
+      });
+    } catch (e) {
+      logger.i('خطأ في مراقبة الاتصال: $e');
+    }
   }
-}
- 
-/// معالج تغير حالة الاتصال
-void _onConnectivityChanged(ConnectivityResult result) {
-  final wasConnected = isConnected.value;
-  connectionType.value = result;
-  isConnected.value = result != ConnectivityResult.none;
 
-  if (!wasConnected && isConnected.value) {
-    // العودة للاتصال
-    _onConnectionRestored();
-  } else if (wasConnected && !isConnected.value) {
-    // انقطاع الاتصال
-    _onConnectionLost();
+  void _onConnectivityChanged(ConnectivityResult result) {
+    final wasConnected = isConnected.value;
+    connectionType.value = result;
+    isConnected.value = result != ConnectivityResult.none;
+
+    if (!wasConnected && isConnected.value) {
+      _onConnectionRestored();
+    } else if (wasConnected && !isConnected.value) {
+      _onConnectionLost();
+    }
   }
-}
 
-
-  /// معالج استعادة الاتصال
   void _onConnectionRestored() {
     Get.snackbar(
       'تم استعادة الاتصال',
@@ -146,12 +241,10 @@ void _onConnectivityChanged(ConnectivityResult result) {
       duration: const Duration(seconds: 3),
       icon: const Icon(Icons.wifi, color: Colors.white),
     );
-    
-    // إعادة تحميل البيانات المهمة
+
     _refreshAppData();
   }
 
-  /// معالج انقطاع الاتصال
   void _onConnectionLost() {
     Get.snackbar(
       'انقطع الاتصال',
@@ -164,84 +257,63 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// فحص حالة التطبيق (صيانة، تحديثات)
   Future<void> _checkAppStatus() async {
     try {
-      // TODO: استدعاء API للحصول على حالة التطبيق
-      // final response = await ApiService.getAppStatus();
-      // isUnderMaintenance.value = response.isUnderMaintenance;
-      // hasUpdate.value = response.hasUpdate;
-      // isUpdateRequired.value = response.isUpdateRequired;
-      // updateUrl.value = response.updateUrl;
-      
       if (isUnderMaintenance.value) {
         _showMaintenanceDialog();
       } else if (hasUpdate.value) {
         _showUpdateDialog();
       }
-      
     } catch (e) {
       logger.i('خطأ في فحص حالة التطبيق: $e');
     }
   }
 
-  /// عرض شاشة التحميل
   void showLoading([String? message]) {
     isLoading.value = true;
     loadingMessage.value = message ?? 'جاري التحميل...';
   }
 
-  /// إخفاء شاشة التحميل
   void hideLoading() {
     isLoading.value = false;
     loadingMessage.value = '';
   }
 
-  /// تغيير الثيم
   Future<void> toggleTheme() async {
     try {
       isDarkMode.value = !isDarkMode.value;
       _applyTheme();
-      
-      // حفظ الإعداد
+
       final box = GetStorage();
       box.write('dark_mode', isDarkMode.value);
-      
-      // إشعار المستخدم
+
       Get.snackbar(
         'تم تغيير المظهر',
         isDarkMode.value ? 'تم تفعيل المظهر الداكن' : 'تم تفعيل المظهر الفاتح',
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 2),
       );
-      
     } catch (e) {
       logger.i('خطأ في تغيير الثيم: $e');
     }
   }
 
-  /// تطبيق الثيم
   void _applyTheme() {
     if (isDarkMode.value) {
       Get.changeTheme(ThemeData.dark().copyWith(
-        primaryColor: Colors.blue, 
-        // primarySwatch: Colors.blue,
-       // fontFamily: 'Cairo',
+        primaryColor: Colors.blue,
       ));
     } else {
-      Get.changeTheme(ThemeData.light().copyWith(        primaryColor: Colors.blue, 
-
-     //   primarySwatch: Colors.blue,
-      //  fontFamily: 'Cairo',
+      Get.changeTheme(ThemeData.light().copyWith(
+        primaryColor: Colors.blue,
       ));
     }
   }
 
-  /// تغيير اللغة
   Future<void> changeLanguage(String languageCode) async {
     try {
       currentLanguage.value = languageCode;
-      
+
       if (languageCode == 'ar') {
         currentLocale.value = const Locale('ar', 'EG');
         Get.updateLocale(const Locale('ar', 'EG'));
@@ -249,24 +321,23 @@ void _onConnectivityChanged(ConnectivityResult result) {
         currentLocale.value = const Locale('en', 'US');
         Get.updateLocale(const Locale('en', 'US'));
       }
-      
-      // حفظ الإعداد
+
       final box = GetStorage();
       box.write('language', languageCode);
-      
+
       Get.snackbar(
         languageCode == 'ar' ? 'تم تغيير اللغة' : 'Language Changed',
-        languageCode == 'ar' ? 'تم تغيير اللغة إلى العربية' : 'Language changed to English',
+        languageCode == 'ar'
+            ? 'تم تغيير اللغة إلى العربية'
+            : 'Language changed to English',
         snackPosition: SnackPosition.BOTTOM,
         duration: const Duration(seconds: 2),
       );
-      
     } catch (e) {
       logger.i('خطأ في تغيير اللغة: $e');
     }
   }
 
-  /// تحديث إعدادات الأصوات والاهتزاز
   Future<void> updateSoundSettings({
     bool? sounds,
     bool? vibrations,
@@ -274,43 +345,38 @@ void _onConnectivityChanged(ConnectivityResult result) {
   }) async {
     try {
       final box = GetStorage();
-      
+
       if (sounds != null) {
         soundsEnabled.value = sounds;
         box.write('sounds_enabled', sounds);
       }
-      
+
       if (vibrations != null) {
         vibrationsEnabled.value = vibrations;
         box.write('vibrations_enabled', vibrations);
       }
-      
+
       if (notifications != null) {
         notificationsEnabled.value = notifications;
         box.write('notifications_enabled', notifications);
-        
-        // تحديث خدمة الإشعارات
-        await NotificationService.to.updateNotificationSettings(
-          enabled: notifications,
+
+        await NotificationService.to.updateSettings(
+          // enabled: notifications,
         );
       }
-      
     } catch (e) {
       logger.i('خطأ في تحديث إعدادات الصوت: $e');
     }
   }
 
-  /// اهتزاز الجهاز
   Future<void> vibrate({int duration = 100}) async {
     if (vibrationsEnabled.value) {
       await HapticFeedback.lightImpact();
     }
   }
 
-  /// تشغيل صوت
   void playSound(String soundType) {
     if (soundsEnabled.value) {
-      // TODO: تشغيل الصوت المناسب
       switch (soundType) {
         case 'notification':
           HapticFeedback.selectionClick();
@@ -325,7 +391,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// إدارة حالة التطبيق في الخلفية
   void onAppLifecycleStateChanged(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.resumed:
@@ -340,19 +405,15 @@ void _onConnectivityChanged(ConnectivityResult result) {
         _onAppDetached();
         break;
       case AppLifecycleState.hidden:
-        // TODO: Handle this case.
     }
   }
 
-  /// عند عودة التطبيق للمقدمة
   void _onAppResumed() {
     isInBackground.value = false;
     _backgroundTimer?.cancel();
-    
-    // فحص التحديثات عند العودة
+
     _checkAppStatus();
-    
-    // إعادة تفعيل خدمات الموقع إذا لزم الأمر
+
     if (Get.isRegistered<AuthController>()) {
       final authController = Get.find<AuthController>();
       if (authController.isLoggedIn.value) {
@@ -361,34 +422,27 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// عند ذهاب التطبيق للخلفية
   void _onAppPaused() {
     isInBackground.value = true;
     backgroundDuration.value = 0;
-    
-    // بدء حساب مدة البقاء في الخلفية
+
     _backgroundTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       backgroundDuration.value++;
     });
   }
 
-  /// عند إغلاق التطبيق
   void _onAppDetached() {
     _backgroundTimer?.cancel();
   }
 
-  /// تحديث البيانات
   Future<void> _refreshAppData() async {
     try {
       if (Get.isRegistered<AuthController>()) {
         final authController = Get.find<AuthController>();
         if (authController.isLoggedIn.value) {
-          // تحديث بيانات المستخدم
-          // await authController.refreshUserData();
-                    await authController.loadUserData(authController.currentUser.value!.id);          
+          await authController
+              .loadUserData(authController.currentUser.value!.id);
 
-          
-          // تحديث الموقع
           await LocationService.to.getCurrentLocation();
         }
       }
@@ -397,7 +451,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// عرض حوار الصيانة
   void _showMaintenanceDialog() {
     Get.dialog(
       WillPopScope(
@@ -433,7 +486,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// عرض حوار التحديث
   void _showUpdateDialog() {
     Get.dialog(
       WillPopScope(
@@ -469,17 +521,12 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// فتح رابط التحديث
-  void _openUpdateUrl() {
-    // TODO: فتح رابط متجر التطبيقات
-    // launch(updateUrl.value);
-  }
+  void _openUpdateUrl() {}
 
-  /// عرض رسالة خطأ عامة
   void showError(String message, {String? title}) {
     playSound('error');
     vibrate(duration: 200);
-    
+
     Get.snackbar(
       title ?? 'خطأ',
       message,
@@ -491,11 +538,10 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// عرض رسالة نجاح عامة
   void showSuccess(String message, {String? title}) {
     playSound('success');
     vibrate(duration: 100);
-    
+
     Get.snackbar(
       title ?? 'نجح',
       message,
@@ -507,7 +553,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// عرض رسالة معلومات عامة
   void showInfo(String message, {String? title}) {
     Get.snackbar(
       title ?? 'معلومات',
@@ -520,7 +565,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// عرض رسالة تحذير عامة
   void showWarning(String message, {String? title}) {
     Get.snackbar(
       title ?? 'تحذير',
@@ -533,7 +577,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     );
   }
 
-  /// فحص صحة البيانات
   bool validateInput(String input, {InputType type = InputType.general}) {
     switch (type) {
       case InputType.phone:
@@ -544,12 +587,9 @@ void _onConnectivityChanged(ConnectivityResult result) {
         return input.trim().length >= 2;
       case InputType.general:
         return input.trim().isNotEmpty;
-      
- 
     }
   }
 
-  /// تنسيق رقم الهاتف
   String formatPhoneNumber(String phone) {
     if (phone.length == 11 && phone.startsWith('0')) {
       return '+20${phone.substring(1)}';
@@ -559,12 +599,10 @@ void _onConnectivityChanged(ConnectivityResult result) {
     return phone;
   }
 
-  /// تنسيق المبلغ المالي
-  String formatCurrency(double amount, {String currency = 'ج.م'}) {
+  String formatCurrency(double amount, {String currency = 'د.ع'}) {
     return '${amount.toStringAsFixed(2)} $currency';
   }
 
-  /// تنسيق المسافة
   String formatDistance(double distanceKm) {
     if (distanceKm < 1) {
       return '${(distanceKm * 1000).round()} متر';
@@ -573,7 +611,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// تنسيق الوقت
   String formatDuration(int minutes) {
     if (minutes < 60) {
       return '$minutes دقيقة';
@@ -584,17 +621,19 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// تنسيق التاريخ والوقت
   String formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inDays == 0) {
-      // اليوم
       final hour = dateTime.hour;
       final minute = dateTime.minute.toString().padLeft(2, '0');
       final amPm = hour >= 12 ? 'م' : 'ص';
-      final displayHour = hour > 12 ? hour - 12 : hour == 0 ? 12 : hour;
+      final displayHour = hour > 12
+          ? hour - 12
+          : hour == 0
+              ? 12
+              : hour;
       return 'اليوم $displayHour:$minute $amPm';
     } else if (difference.inDays == 1) {
       return 'أمس';
@@ -605,29 +644,23 @@ void _onConnectivityChanged(ConnectivityResult result) {
     }
   }
 
-  /// إعادة تعيين التطبيق
   Future<void> resetApp() async {
     try {
       showLoading('جاري إعادة تعيين التطبيق...');
-      
-      // تسجيل خروج المستخدم
+
       if (Get.isRegistered<AuthController>()) {
         await Get.find<AuthController>().signOut();
       }
-      
-      // مسح البيانات المحفوظة
+
       final box = GetStorage();
       await box.erase();
-      
-      // إعادة تحميل الإعدادات الافتراضية
+
       await _loadAppSettings();
-      
+
       hideLoading();
       showSuccess('تم إعادة تعيين التطبيق بنجاح');
-      
-      // العودة لشاشة البداية
+
       Get.offAllNamed('/splash');
-      
     } catch (e) {
       hideLoading();
       showError('خطأ في إعادة تعيين التطبيق: $e');
@@ -642,7 +675,6 @@ void _onConnectivityChanged(ConnectivityResult result) {
   }
 }
 
-/// أنواع المدخلات للتحقق
 enum InputType {
   general,
   phone,

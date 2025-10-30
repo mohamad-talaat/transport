@@ -49,7 +49,6 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
   }
 
   void _initializeAnimations() {
-    // تحريك نبضي للدائرة
     _pulseController = AnimationController(
       duration: const Duration(seconds: 1),
       vsync: this,
@@ -62,7 +61,6 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
       curve: Curves.easeInOut,
     ));
 
-    // تحريك عداد التنازلي
     _countdownController = AnimationController(
       duration: const Duration(seconds: 30),
       vsync: this,
@@ -129,6 +127,24 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
     }
   }
 
+  List<LocationPoint> _getAdditionalStops() {
+    List<LocationPoint> stops = [];
+    for (var stop in widget.trip.additionalStops) {
+      try {
+stops.add(
+  LocationPoint(
+    lat: stop.location.latitude,
+    lng: stop.location.longitude,
+    address: stop.address,
+  ),
+);
+      } catch (e) {
+        logger.w('خطأ في تحويل النقطة الإضافية: $e');
+      }
+    }
+    return stops;
+  }
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -139,24 +155,29 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
 
   @override
   Widget build(BuildContext context) {
+    final additionalStops = _getAdditionalStops();
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         padding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxHeight: 600),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header with countdown
             _buildHeader(),
-
             const SizedBox(height: 20),
-
-            // Trip details
-            _buildTripDetails(),
-
-            const SizedBox(height: 20),
-
-            // Action buttons
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTripDetails(additionalStops),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ),
             _buildActionButtons(),
           ],
         ),
@@ -167,7 +188,6 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
   Widget _buildHeader() {
     return Column(
       children: [
-        // Countdown circle
         AnimatedBuilder(
           animation: _countdownAnimation,
           builder: (context, child) {
@@ -218,10 +238,7 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
             );
           },
         ),
-
         const SizedBox(height: 15),
-
-        // Title and countdown text
         const Text(
           'طلب رحلة جديد',
           style: TextStyle(
@@ -229,9 +246,7 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
             fontWeight: FontWeight.bold,
           ),
         ),
-
         const SizedBox(height: 8),
-
         Text(
           'الوقت المتبقي: $_remainingSeconds ثانية',
           style: TextStyle(
@@ -240,11 +255,63 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
             color: _remainingSeconds > 10 ? Colors.green : Colors.red,
           ),
         ),
+        if (widget.trip.additionalStops.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.location_on, color: Colors.orange, size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  '${widget.trip.additionalStops.length} نقطة إضافية',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (widget.trip.waitingTime > 0) ...[
+          const SizedBox(height: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.schedule, color: Colors.blue, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'انتظار: ${widget.trip.waitingTime} دقيقة',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue.shade700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildTripDetails() {
+  Widget _buildTripDetails(List<LocationPoint> additionalStops) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -254,34 +321,98 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
       ),
       child: Column(
         children: [
-          // Pickup location
           _buildLocationRow(
             Icons.my_location,
             Colors.green,
             'موقع الراكب',
             widget.trip.pickupLocation.address,
           ),
-
+          if (additionalStops.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.route, color: Colors.orange, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'نقاط إضافية (${additionalStops.length}):',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ...additionalStops.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final stop = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${index + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              stop.address,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
-
-          // Destination
           _buildLocationRow(
             Icons.location_on,
             Colors.red,
-            'الوجهة',
+            'الوجهة النهائية',
             widget.trip.destinationLocation.address,
           ),
-
           const SizedBox(height: 20),
-
-          // Trip info
           Row(
             children: [
               Expanded(
                 child: _buildInfoCard(
                   Icons.attach_money,
                   'الأجرة',
-                  '${widget.trip.fare.toStringAsFixed(2)} ج.م',
+                  '${widget.trip.fare.toStringAsFixed(2)} د.ع',
                   Colors.green,
                 ),
               ),
@@ -296,9 +427,7 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
               ),
             ],
           ),
-
           const SizedBox(height: 12),
-
           Row(
             children: [
               Expanded(
@@ -322,7 +451,109 @@ class _DriverTripRequestDialogState extends State<DriverTripRequestDialog>
               ),
             ],
           ),
-
+          if (widget.trip.waitingTime > 0) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInfoCard(
+                    Icons.schedule,
+                    'وقت الانتظار',
+                    '${widget.trip.waitingTime} دقيقة',
+                    Colors.teal,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildInfoCard(
+                    Icons.payment,
+                    'طريقة الدفع',
+                    widget.trip.paymentMethod == 'app' ? 'محفظة' : 'نقدي',
+                    Colors.indigo,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
+          if (widget.trip.isRush) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.flash_on, color: Colors.red, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'رحلة مستعجلة - أولوية عالية',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (widget.trip.isRoundTrip) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.purple.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.purple.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.repeat, color: Colors.purple, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'رحلة ذهاب وعودة',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.purple,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (widget.trip.waitingTime > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.teal.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule, color: Colors.teal, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'يتضمن انتظار لمدة ${widget.trip.waitingTime} دقيقة',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.teal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (_estimatedTimeToPickup != null) ...[
             const SizedBox(height: 12),
             Container(

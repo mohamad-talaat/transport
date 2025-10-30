@@ -31,20 +31,11 @@ class PhoneAuthView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 20),
-              
-              // العنوان
               _buildHeader(),
-              
               const SizedBox(height: 40),
-              
-              // نموذج إدخال رقم الهاتف
               _buildPhoneForm(),
-              
               const Spacer(),
-              
-              // زر المتابعة
               _buildContinueButton(),
-              
               const SizedBox(height: 20),
             ],
           ),
@@ -57,7 +48,6 @@ class PhoneAuthView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // أيقونة نوع المستخدم
         Container(
           width: 60,
           height: 60,
@@ -66,16 +56,14 @@ class PhoneAuthView extends StatelessWidget {
             borderRadius: BorderRadius.circular(15),
           ),
           child: Icon(
-            authController.selectedUserType.value == UserType.rider 
-                ? Icons.person 
+            authController.selectedUserType.value == UserType.rider
+                ? Icons.person
                 : Icons.drive_eta,
             color: _getUserTypeColor(),
             size: 30,
           ),
         ),
-        
         const SizedBox(height: 24),
-        
         const Text(
           'ادخل رقم الهاتف',
           style: TextStyle(
@@ -84,9 +72,7 @@ class PhoneAuthView extends StatelessWidget {
             color: Colors.black87,
           ),
         ),
-        
         const SizedBox(height: 8),
-        
         Text(
           'سنرسل لك رمز التحقق عبر الرسائل القصيرة',
           style: TextStyle(
@@ -110,10 +96,7 @@ class PhoneAuthView extends StatelessWidget {
             color: Colors.black87,
           ),
         ),
-        
         const SizedBox(height: 12),
-        
-        // حقل إدخال رقم الهاتف
         Container(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade300, width: 1.5),
@@ -121,9 +104,9 @@ class PhoneAuthView extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // رمز الدولة
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
                   borderRadius: const BorderRadius.only(
@@ -150,15 +133,11 @@ class PhoneAuthView extends StatelessWidget {
                   ],
                 ),
               ),
-              
-              // خط فاصل
               Container(
                 width: 1,
                 height: 50,
                 color: Colors.grey.shade300,
               ),
-              
-              // مربع إدخال الرقم
               Expanded(
                 child: TextField(
                   controller: authController.phoneController,
@@ -192,10 +171,7 @@ class PhoneAuthView extends StatelessWidget {
             ],
           ),
         ),
-        
         const SizedBox(height: 16),
-        
-        // معلومة توضيحية
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -228,78 +204,75 @@ class PhoneAuthView extends StatelessWidget {
 
   Widget _buildContinueButton() {
     return Obx(() => Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 56,
-          child: ElevatedButton(
-            onPressed: authController.isLoading.value 
-                ? null 
-                : () => _validateAndSendOTP(),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _getUserTypeColor(),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: authController.isLoading.value
+                    ? null
+                    : () => _validateAndSendOTP(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getUserTypeColor(),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 2,
+                ),
+                child: authController.isLoading.value
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'متابعة',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
               ),
-              elevation: 2,
             ),
-            child: authController.isLoading.value
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Text(
-                    'متابعة',
+            const SizedBox(height: 16),
+            Text.rich(
+              TextSpan(
+                text: 'بالمتابعة، أنت توافق على ',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                ),
+                children: [
+                  TextSpan(
+                    text: 'الشروط والأحكام',
                     style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      color: _getUserTypeColor(),
+                      decoration: TextDecoration.underline,
                     ),
                   ),
-          ),
-        ),
-        
-        const SizedBox(height: 16),
-        
-        // نص اتفاقية الاستخدام
-        Text.rich(
-          TextSpan(
-            text: 'بالمتابعة، أنت توافق على ',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey.shade600,
+                  const TextSpan(text: ' و '),
+                  TextSpan(
+                    text: 'سياسة الخصوصية',
+                    style: TextStyle(
+                      color: _getUserTypeColor(),
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
             ),
-            children: [
-              TextSpan(
-                text: 'الشروط والأحكام',
-                style: TextStyle(
-                  color: _getUserTypeColor(),
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-              const TextSpan(text: ' و '),
-              TextSpan(
-                text: 'سياسة الخصوصية',
-                style: TextStyle(
-                  color: _getUserTypeColor(),
-                  decoration: TextDecoration.underline,
-                ),
-              ),
-            ],
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ],
-    ));
+          ],
+        ));
   }
 
   void _validateAndSendOTP() {
     String phone = authController.phoneController.text.trim();
-    
+
     if (phone.isEmpty) {
       Get.snackbar(
         'خطأ',
@@ -310,7 +283,7 @@ class PhoneAuthView extends StatelessWidget {
       );
       return;
     }
-    
+
     if (phone.length < 10) {
       Get.snackbar(
         'خطأ',
@@ -321,17 +294,14 @@ class PhoneAuthView extends StatelessWidget {
       );
       return;
     }
-    
-    // تحديث رقم الهاتف بشكل صحيح
+
     authController.phoneController.text = _formatIraqiPhone(phone);
     authController.sendOTP();
   }
 
   String _formatIraqiPhone(String phone) {
-    // إزالة أي مسافات أو رموز
     phone = phone.replaceAll(RegExp(r'[^\d]'), '');
-    
-    // إضافة رمز العراق إذا لم يكن موجود
+
     if (!phone.startsWith('+964')) {
       if (phone.startsWith('964')) {
         phone = '+$phone';
@@ -341,7 +311,7 @@ class PhoneAuthView extends StatelessWidget {
         phone = '+964$phone';
       }
     }
-    
+
     return phone;
   }
 
@@ -352,7 +322,6 @@ class PhoneAuthView extends StatelessWidget {
   }
 }
 
-/// مُنسق رقم الهاتف العراقي
 class _IraqPhoneFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -360,7 +329,7 @@ class _IraqPhoneFormatter extends TextInputFormatter {
     TextEditingValue newValue,
   ) {
     String text = newValue.text.replaceAll(' ', '');
-    
+
     if (text.length <= 3) {
       return newValue.copyWith(text: text);
     } else if (text.length <= 6) {
@@ -372,7 +341,8 @@ class _IraqPhoneFormatter extends TextInputFormatter {
       );
     } else {
       return newValue.copyWith(
-        text: '${text.substring(0, 3)} ${text.substring(3, 6)} ${text.substring(6)}',
+        text:
+            '${text.substring(0, 3)} ${text.substring(3, 6)} ${text.substring(6)}',
         selection: TextSelection.collapsed(
           offset: text.length + 2,
         ),

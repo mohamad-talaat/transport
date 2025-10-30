@@ -1,19 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:get/get.dart';
 import 'package:logger/logger.dart';
-import '../models/rider_model.dart';
-import '../models/driver_model.dart';
+import 'package:transport_app/models/user_model.dart';
 
 class UserManagementService extends GetxService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Logger _logger = Logger();
 
-  // كوليكشن واحد فقط
   static const String usersCollection = 'users';
 
-  // متغيرات تفاعلية
-  final Rx<RiderModel?> currentRider = Rx<RiderModel?>(null);
-  final Rx<DriverModel?> currentDriver = Rx<DriverModel?>(null);
+  final Rx<UserModel?> currentRider = Rx<UserModel?>(null);
+  final Rx<UserModel?> currentDriver = Rx<UserModel?>(null);
   final RxBool isLoading = false.obs;
 
   @override
@@ -22,10 +19,7 @@ class UserManagementService extends GetxService {
     _logger.i('تم تهيئة UserManagementService');
   }
 
-  // ==================== إدارة الراكبين ====================
-
-  /// إنشاء راكب جديد
-  Future<RiderModel?> createRider({
+  Future<UserModel?> createRider({
     required String id,
     required String name,
     required String phone,
@@ -36,7 +30,7 @@ class UserManagementService extends GetxService {
     try {
       isLoading.value = true;
 
-      final rider = RiderModel(
+      final rider = UserModel(
         id: id,
         name: name,
         phone: phone,
@@ -44,6 +38,7 @@ class UserManagementService extends GetxService {
         profileImage: profileImage,
         createdAt: DateTime.now(),
         fcmToken: fcmToken,
+        userType: UserType.rider,
       );
 
       await _firestore.collection(usersCollection).doc(id).set({
@@ -62,13 +57,13 @@ class UserManagementService extends GetxService {
     }
   }
 
-  /// جلب بيانات راكب
-  Future<RiderModel?> getRider(String riderId) async {
+  Future<UserModel?> getRider(String riderId) async {
     try {
-      final doc = await _firestore.collection(usersCollection).doc(riderId).get();
+      final doc =
+          await _firestore.collection(usersCollection).doc(riderId).get();
 
       if (doc.exists && doc['userType'] == 'rider') {
-        final rider = RiderModel.fromMap(doc.data()!);
+        final rider = UserModel.fromMap(doc.data()!);
         currentRider.value = rider;
         return rider;
       }
@@ -79,10 +74,7 @@ class UserManagementService extends GetxService {
     }
   }
 
-  // ==================== إدارة السائقين ====================
-
-  /// إنشاء سائق جديد
-  Future<DriverModel?> createDriver({
+  Future<UserModel?> createDriver({
     required String id,
     required String name,
     required String phone,
@@ -93,7 +85,7 @@ class UserManagementService extends GetxService {
     try {
       isLoading.value = true;
 
-      final driver = DriverModel(
+      final driver = UserModel(
         id: id,
         name: name,
         phone: phone,
@@ -101,7 +93,8 @@ class UserManagementService extends GetxService {
         profileImage: profileImage,
         createdAt: DateTime.now(),
         fcmToken: fcmToken,
-        status: DriverStatus.pending,
+        driverStatus: DriverStatus.pending,
+        userType: UserType.driver,
       );
 
       await _firestore.collection(usersCollection).doc(id).set({
@@ -120,13 +113,13 @@ class UserManagementService extends GetxService {
     }
   }
 
-  /// جلب بيانات سائق
-  Future<DriverModel?> getDriver(String driverId) async {
+  Future<UserModel?> getDriver(String driverId) async {
     try {
-      final doc = await _firestore.collection(usersCollection).doc(driverId).get();
+      final doc =
+          await _firestore.collection(usersCollection).doc(driverId).get();
 
       if (doc.exists && doc['userType'] == 'driver') {
-        final driver = DriverModel.fromMap(doc.data()!);
+        final driver = UserModel.fromMap(doc.data()!);
         currentDriver.value = driver;
         return driver;
       }
@@ -137,34 +130,27 @@ class UserManagementService extends GetxService {
     }
   }
 
-  // ==================== جلب قوائم المستخدمين ====================
-
-  /// جلب جميع الراكبين
-  Stream<List<RiderModel>> getAllRiders() {
+  Stream<List<UserModel>> getAllRiders() {
     return _firestore
         .collection(usersCollection)
         .where('userType', isEqualTo: 'rider')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => RiderModel.fromMap(doc.data()))
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList());
   }
 
-  /// جلب جميع السائقين
-  Stream<List<DriverModel>> getAllDrivers() {
+  Stream<List<UserModel>> getAllDrivers() {
     return _firestore
         .collection(usersCollection)
         .where('userType', isEqualTo: 'driver')
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => DriverModel.fromMap(doc.data()))
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList());
   }
 
-  /// جلب السائقين المتاحين
-  Stream<List<DriverModel>> getAvailableDrivers() {
+  Stream<List<UserModel>> getAvailableDrivers() {
     return _firestore
         .collection(usersCollection)
         .where('userType', isEqualTo: 'driver')
@@ -173,11 +159,10 @@ class UserManagementService extends GetxService {
         .where('isOnline', isEqualTo: true)
         .where('isAvailable', isEqualTo: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => DriverModel.fromMap(doc.data()))
-            .toList());
+        .map((snapshot) =>
+            snapshot.docs.map((doc) => UserModel.fromMap(doc.data())).toList());
   }
-  /// تحديث بيانات سائق
+
   Future<bool> updateDriver(String driverId, Map<String, dynamic> data) async {
     try {
       await _firestore.collection(usersCollection).doc(driverId).update(data);
@@ -189,7 +174,6 @@ class UserManagementService extends GetxService {
     }
   }
 
-  /// تحديث بيانات راكب
   Future<bool> updateRider(String riderId, Map<String, dynamic> data) async {
     try {
       await _firestore.collection(usersCollection).doc(riderId).update(data);
@@ -200,6 +184,4 @@ class UserManagementService extends GetxService {
       return false;
     }
   }
-
-
 }

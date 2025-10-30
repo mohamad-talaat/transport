@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,8 +10,7 @@ import 'package:transport_app/main.dart';
 import 'package:transport_app/models/user_model.dart';
 import 'package:transport_app/routes/app_routes.dart';
 import 'package:transport_app/services/driver_profile_service.dart';
- 
-// import '../views/rider/location_permission_screen.dart';
+import 'package:transport_app/views/account/account_suspended_view.dart';
 
 class AuthController extends GetxController {
   static AuthController get to => Get.find();
@@ -18,21 +18,17 @@ class AuthController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // User state
   final Rx<User?> _firebaseUser = Rx<User?>(null);
   final Rx<UserModel?> currentUser = Rx<UserModel?>(null);
   final RxBool isLoggedIn = false.obs;
   final RxBool isLoading = false.obs;
 
-  // Control flag to prevent multiple initializations
   bool _isInitialized = false;
 
-  // Auth data
   final RxString phoneNumber = ''.obs;
   final RxString verificationId = ''.obs;
   final Rx<UserType?> selectedUserType = Rx<UserType?>(null);
 
-  // Controllers
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController otpController = TextEditingController();
   final TextEditingController nameController = TextEditingController();
@@ -42,207 +38,35 @@ class AuthController extends GetxController {
   void onInit() {
     super.onInit();
     _initializeController();
+    saveFCMToken();
+
+    FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+      saveFCMToken();
+    });
   }
 
-  // وضع الاختبار (محاكاة)
-  final RxBool mockMode = false.obs;
-
-  /// 🔹 الدخول كضيف Rider
-  Future<void> signInAsGuest() async {
+  Future<UserModel?> getUserById(String userId) async {
     try {
-      mockMode.value = true; // ✅ نفعل وضع الاختبار
-
-      UserModel guestUser = UserModel(
-        id: "guest_rider",
-        name: "ضيف راكب",
-        email: "guest_rider@test.com",
-        phone: "",
-        profileImage: "",
-        userType: UserType.rider,
-        balance: 5000,
-        isActive: true,
-        isApproved: true,
-        isRejected: false,
-        isVerified: true,
-        createdAt: DateTime.now(),
-      );
-
-      currentUser.value = guestUser;
-      selectedUserType.value = UserType.rider;
-      isLoggedIn.value = true;
-
-      // 🔥 نبدأ رحلة وهمية مباشرة
-      await simulateTripFlow(guestUser.id);
-
-      await simulateMultipleTrips("guest_rider", [
-        {
-          "pickup": {"lat": 30.82, "lng": 29.00, "address": "Pickup Point A"},
-          "destination": {
-            "lat": 30.90,
-            "lng": 29.05,
-            "address": "Destination A"
-          },
-          "fare": 20.0,
-        },
-        {
-          "pickup": {"lat": 30.70, "lng": 29.10, "address": "Pickup Point B"},
-          "destination": {
-            "lat": 30.75,
-            "lng": 29.15,
-            "address": "Destination B"
-          },
-          "fare": 35.0,
-        },
-        {
-          "pickup": {"lat": 30.60, "lng": 29.20, "address": "Pickup Point C"},
-          "destination": {
-            "lat": 30.65,
-            "lng": 29.30,
-            "address": "Destination C"
-          },
-          "fare": 50.0,
-        },
-      ]);
-
-      // ✅ هنا بعد ما تخلص simulateTripFlow
-      navigateToHome();
+      DocumentSnapshot userDoc =
+          await _firestore.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        return UserModel.fromMap(userDoc.data() as Map<String, dynamic>);
+      }
+      return null;
     } catch (e) {
-      Get.snackbar("خطأ", "فشل الدخول كضيف راكب: $e");
+      logger.e("Error getting user by ID: $e");
+      return null;
     }
   }
 
-  /// 🔹 الدخول كضيف Driver
-  Future<void> signInAsGuestDriver() async {
-    try {
-      mockMode.value = true; // ✅ نفعل وضع الاختبار
-
-      UserModel guestDriver = UserModel(
-        id: "guest_driver",
-        name: "ضيف سائق",
-        email: "guest_driver@test.com",
-        phone: "",
-        profileImage: "",
-        userType: UserType.driver,
-        balance: 5000,
-        isActive: true,
-        isApproved: true,
-        isRejected: false,
-        isVerified: true,
-        createdAt: DateTime.now(),
-      );
-
-      currentUser.value = guestDriver;
-      selectedUserType.value = UserType.driver;
-      isLoggedIn.value = true;
-      navigateToHome();
-      // ✅ السواق الوهمي مش بيعمل رحلة، بس يبقى ظاهر أونلاين
-    } catch (e) {
-      Get.snackbar("خطأ", "فشل الدخول كضيف سائق: $e");
-    }
-  }
-
-  /// 🔹 محاكاة رحلات متعددة
-  Future<void> simulateMultipleTrips(
-      String riderId, List<Map<String, dynamic>> trips) async {
-    if (!mockMode.value) return;
-
-    for (var i = 0; i < trips.length; i++) {
-      final trip = trips[i];
-      final tripId = "mock_trip_${DateTime.now().millisecondsSinceEpoch}_$i";
-      final tripRef = _firestore.collection("trips").doc(tripId);
-
-      // 1. طلب الرحلة
-      await tripRef.set({
-        "id": tripId,
-        "riderId": riderId,
-        "driverId": "guest_driver",
-        "status": "requested",
-        "createdAt": DateTime.now(),
-        "pickupLocation": trip["pickup"],
-        "destinationLocation": trip["destination"],
-        "fare": trip["fare"],
-      });
-
-      // 2. قبول الرحلة
-      await Future.delayed(const Duration(seconds: 2));
-      await tripRef.update({
-        "status": "accepted",
-        "acceptedAt": DateTime.now(),
-      });
-
-      // 3. بدء الرحلة
-      await Future.delayed(const Duration(seconds: 2));
-      await tripRef.update({
-        "status": "ongoing",
-        "startedAt": DateTime.now(),
-      });
-
-      // 4. إنهاء الرحلة
-      await Future.delayed(const Duration(seconds: 2));
-      await tripRef.update({
-        "status": "completed",
-        "completedAt": DateTime.now(),
-      });
-    }
-  }
-
-  /// 🔹 محاكاة رحلة كاملة
-  Future<void> simulateTripFlow(String riderId) async {
-    if (!mockMode.value) return;
-
-    final tripId = "mock_trip_${DateTime.now().millisecondsSinceEpoch}";
-    final tripRef = _firestore.collection("trips").doc(tripId);
-
-    // 1. طلب الرحلة
-    await tripRef.set({
-      "id": tripId,
-      "riderId": riderId,
-      "driverId": "guest_driver",
-      "status": "requested",
-      "createdAt": DateTime.now(),
-      "pickupLocation": {"lat": 30.82, "lng": 29.00, "address": "Pickup Point"},
-      "destinationLocation": {
-        "lat": 30.83,
-        "lng": 29.01,
-        "address": "Destination"
-      },
-      "fare": 15.0,
-    });
-
-    // 2. قبول الرحلة
-    await Future.delayed(const Duration(seconds: 2));
-    await tripRef.update({
-      "status": "accepted",
-      "acceptedAt": DateTime.now(),
-    });
-
-    // 3. بدء الرحلة
-    await Future.delayed(const Duration(seconds: 2));
-    await tripRef.update({
-      "status": "ongoing",
-      "startedAt": DateTime.now(),
-    });
-
-    // 4. إنهاء الرحلة
-    await Future.delayed(const Duration(seconds: 2));
-    await tripRef.update({
-      "status": "completed",
-      "completedAt": DateTime.now(),
-    });
-  }
-
-  /// تهيئة الـ Controller بشكل آمن
   Future<void> _initializeController() async {
     if (_isInitialized) return;
 
     try {
-      // تحميل حالة تسجيل الدخول المحفوظة
-      await _loadLoginState();
+      await loadLoginState();
 
-      // تحديث الـ Firebase User الحالي
       _firebaseUser.value = _auth.currentUser;
 
-      // إذا كان هناك مستخدم، تحميل بياناته
       if (_firebaseUser.value != null) {
         await loadUserData(_firebaseUser.value!.uid);
         if (currentUser.value != null) {
@@ -250,7 +74,6 @@ class AuthController extends GetxController {
         }
       }
 
-      // البدء في الاستماع لتغييرات حالة المستخدم
       _firebaseUser.bindStream(_auth.authStateChanges());
       ever(_firebaseUser, _handleAuthStateChange);
 
@@ -260,24 +83,20 @@ class AuthController extends GetxController {
     }
   }
 
-  /// معالجة تغييرات حالة المصادقة
   void _handleAuthStateChange(User? user) async {
-    // تجنب التعامل مع التغييرات أثناء التهيئة الأولى
     if (!_isInitialized) return;
 
     if (user == null) {
-      // المستخدم خرج من النظام
       currentUser.value = null;
       isLoggedIn.value = false;
-      // مسح البيانات المحفوظة
+
       await _clearSavedLoginState();
     } else {
-      // المستخدم سجل دخول أو تم تحديث بياناته
       await loadUserData(user.uid);
 
       if (currentUser.value != null) {
         isLoggedIn.value = true;
-        // حفظ حالة تسجيل الدخول
+
         await _saveLoginState();
       }
     }
@@ -291,30 +110,26 @@ class AuthController extends GetxController {
         final data = doc.data() as Map<String, dynamic>;
         currentUser.value = UserModel.fromMap(data);
 
-        // تحديث حالة الملف الشخصي
+        // تأكد من أن 'additionalData' موجود قبل الوصول إليه
         final additionalData =
             data['additionalData'] as Map<String, dynamic>? ?? {};
 
-        // التحقق من اكتمال الملف للسائق
-        if (data['userType'] == 'driver') {
-          bool isComplete = _isProfileComplete(data, additionalData);
-
-          // إذا كان الملف مكتمل لكن لم يتم وضع العلامة
-          if (isComplete && data['isProfileComplete'] != true) {
-            await _firestore.collection('users').doc(uid).update({
-              'isProfileComplete': true,
-              'status': 'pending',
-              'updatedAt': FieldValue.serverTimestamp(),
-            });
-
-            // إعادة تحميل البيانات المحدثة
-            final updatedDoc =
-                await _firestore.collection('users').doc(uid).get();
-            if (updatedDoc.exists) {
-              currentUser.value = UserModel.fromMap(updatedDoc.data()!);
-            }
-          }
-        }
+if (data['userType'] == 'driver') {
+  // Re-fetch the user model to ensure it uses the latest data and its own logic
+  UserModel? updatedUserModel = await getUserById(uid);
+  if (updatedUserModel != null && updatedUserModel.isDriverProfileComplete && !(data['isProfileComplete'] ?? false)) {
+    await _firestore.collection('users').doc(uid).update({
+      'isProfileComplete': true,
+      'status': 'pending',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    // Reload current user value after update
+    final updatedDoc = await _firestore.collection('users').doc(uid).get();
+    if (updatedDoc.exists) {
+      currentUser.value = UserModel.fromMap(updatedDoc.data()!);
+    }
+  }
+}
       } else {
         currentUser.value = null;
       }
@@ -324,32 +139,7 @@ class AuthController extends GetxController {
     }
   }
 
-// إضافة دالة التحقق من اكتمال الملف
-  bool _isProfileComplete(
-      Map<String, dynamic> data, Map<String, dynamic> additionalData) {
-    return data['name'] != null &&
-        data['name'].toString().isNotEmpty &&
-        data['phone'] != null &&
-        data['phone'].toString().isNotEmpty &&
-        data['email'] != null &&
-        data['email'].toString().isNotEmpty &&
-        data['nationalId'] != null &&
-        data['nationalId'].toString().isNotEmpty &&
-        data['nationalIdImage'] != null &&
-        data['drivingLicense'] != null &&
-        data['drivingLicense'].toString().isNotEmpty &&
-        data['drivingLicenseImage'] != null &&
-        data['vehicleModel'] != null &&
-        data['vehicleModel'].toString().isNotEmpty &&
-        data['vehicleColor'] != null &&
-        data['vehicleColor'].toString().isNotEmpty &&
-        data['vehiclePlateNumber'] != null &&
-        data['vehiclePlateNumber'].toString().isNotEmpty &&
-        data['vehicleImage'] != null &&
-        data['insuranceImage'] != null;
-  }
-
-  /// التنقل إلى الصفحة الرئيسية حسب نوع المستخدم (تجاوز أي حوارات وسيطًا)
+  
   void navigateToHome() {
     if (currentUser.value?.userType == UserType.rider) {
       Get.offAllNamed(AppRoutes.RIDER_HOME);
@@ -358,7 +148,23 @@ class AuthController extends GetxController {
     }
   }
 
-  /// التحقق من اكتمال بروفايل السائق والتوجيه
+  Future<void> saveFCMToken() async {
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && currentUser.value != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.value!.id)
+            .update({
+          'fcmToken': fcmToken,
+          'lastActive': FieldValue.serverTimestamp(),
+        });
+      }
+    } catch (e) {
+      logger.w('Error saving FCM token: $e');
+    }
+  }
+
   Future<void> _checkDriverProfileAndNavigate() async {
     try {
       final userId = currentUser.value?.id;
@@ -366,46 +172,31 @@ class AuthController extends GetxController {
         Get.offAllNamed(AppRoutes.DRIVER_HOME);
         return;
       }
-      // ✅ لو احنا في وضع محاكاة (ضيف سائق)، يدخل مباشرة للهوم
-      if (mockMode.value && userId == "guest_driver") {
-        Get.offAllNamed(AppRoutes.DRIVER_HOME);
-        return;
-      }
 
-      // التحقق من اكتمال البروفايل
       final profileService = Get.find<DriverProfileService>();
       final isComplete = await profileService.isProfileComplete(userId);
 
       if (!isComplete) {
-        // إذا لم يكمل البروفايل، توجيه لشاشة الإكمال
         Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
         return;
       }
 
-      // التحقق من موافقة الإدارة
       final isApproved = await profileService.isDriverApproved(userId);
 
       if (!isApproved) {
-        // إذا لم يتم الموافقة عليه، توجيه لشاشة الإكمال مع رسالة
         Get.offAllNamed(AppRoutes.DRIVER_PROFILE_COMPLETION);
         return;
       }
 
-      // إذا اكتمل البروفايل وتمت الموافقة، توجيه للشاشة الرئيسية
       Get.offAllNamed(AppRoutes.DRIVER_HOME);
     } catch (e) {
       logger.w('خطأ في التحقق من بروفايل السائق: $e');
-      // في حالة الخطأ، توجيه للشاشة الرئيسية
+
       Get.offAllNamed(AppRoutes.DRIVER_HOME);
     }
   }
 
-  // لم نعد نستخدم نافذة طلب إذن الموقع عند الدخول
-
-  /// تحديد نوع المستخدم للتسجيل الاجتماعي
-  /// يرجع true إذا تم قبول النوع ويمكن المتابعة، وfalse إذا كان هناك تعارض
   Future<bool> selectUserTypeForSocialLogin(UserType type) async {
-    // التحقق من وجود حساب سابق
     if (_auth.currentUser != null) {
       DocumentSnapshot existingUser = await _firestore
           .collection('users')
@@ -414,8 +205,7 @@ class AuthController extends GetxController {
 
       if (existingUser.exists) {
         final userData = existingUser.data() as Map<String, dynamic>;
-        final existingUserType =
-            userData['userType'] as String; // تُحفظ كـ 'rider' أو 'driver'
+        final existingUserType = userData['userType'] as String;
 
         if (existingUserType != type.name) {
           Get.snackbar(
@@ -434,10 +224,9 @@ class AuthController extends GetxController {
     return true;
   }
 
-  /// تحديد نوع المستخدم للهاتف (قريباً)
   void selectUserType(UserType type) {
     selectedUserType.value = type;
-    // TODO: سيتم تفعيل تسجيل الهاتف لاحقاً
+
     Get.snackbar(
       'قريباً',
       'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
@@ -447,7 +236,6 @@ class AuthController extends GetxController {
     );
   }
 
-  /// تسجيل الدخول بـ Google
   Future<void> signInWithGoogle() async {
     if (selectedUserType.value == null) {
       Get.snackbar(
@@ -463,19 +251,16 @@ class AuthController extends GetxController {
     try {
       isLoading.value = true;
 
-      // تسجيل خروج كامل لضمان اختيار الحساب
       try {
         await _auth.signOut();
       } catch (_) {}
 
-      // استخدام مزود Google من FirebaseAuth مباشرة (v6+)
       final googleProvider = GoogleAuthProvider();
       googleProvider.addScope('email');
 
       UserCredential result = await _auth.signInWithProvider(googleProvider);
 
       if (result.user != null) {
-        // جمع بيانات المستخدم بطريقة آمنة
         Map<String, dynamic> userInfo = {
           'name': result.user!.displayName ?? '',
           'email': result.user!.email ?? '',
@@ -524,7 +309,7 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
       );
     } catch (e) {
       isLoading.value = false;
@@ -543,12 +328,11 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       );
     }
   }
 
-  /// تسجيل الدخول بـ Apple - مُحسّن
   Future<void> signInWithApple() async {
     if (selectedUserType.value == null) {
       Get.snackbar(
@@ -600,7 +384,6 @@ class AuthController extends GetxController {
 
       switch (e.code) {
         case AuthorizationErrorCode.canceled:
-          // لا تعرض رسالة خطأ عند الإلغاء
           return;
         case AuthorizationErrorCode.failed:
           errorMessage = 'فشلت عملية المصادقة مع Apple';
@@ -625,7 +408,7 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       );
     } on FirebaseAuthException catch (e) {
       isLoading.value = false;
@@ -636,7 +419,7 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 4),
+        duration: const Duration(seconds: 4),
       );
     } catch (e) {
       isLoading.value = false;
@@ -647,24 +430,20 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       );
     }
   }
 
-  /// معالجة تسجيل الدخول الناجح - مُحسّنة
   Future<void> _handleSuccessfulLogin(
       User firebaseUser, Map<String, dynamic> userInfo) async {
     try {
-      // التحقق من وجود حساب سابق
       DocumentSnapshot existingUser =
           await _firestore.collection('users').doc(firebaseUser.uid).get();
 
       if (existingUser.exists) {
-        // المستخدم موجود بالفعل - تحميل بياناته
         await loadUserData(firebaseUser.uid);
 
-        // منع استخدام نفس الحساب لنوع مختلف مما تم اختياره
         if (selectedUserType.value != null &&
             currentUser.value != null &&
             currentUser.value!.userType != selectedUserType.value) {
@@ -676,9 +455,9 @@ class AuthController extends GetxController {
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Colors.red,
             colorText: Colors.white,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 4),
           );
-          // تسجيل الخروج لمنع الدخول الخاطئ
+
           await signOut();
           return;
         }
@@ -690,15 +469,13 @@ class AuthController extends GetxController {
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Colors.green,
             colorText: Colors.white,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           );
         }
       } else {
-        // مستخدم جديد - إنشاء حساب
         await _createNewUser(firebaseUser, userInfo);
       }
 
-      // حفظ حالة تسجيل الدخول
       await _saveLoginState();
 
       isLoggedIn.value = true;
@@ -711,14 +488,13 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 3),
+        duration: const Duration(seconds: 3),
       );
     } finally {
       isLoading.value = false;
     }
   }
 
-  /// إنشاء مستخدم جديد (يُخزن في drivers/riders بدل users)
   Future<void> _createNewUser(
       User firebaseUser, Map<String, dynamic> userInfo) async {
     Map<String, dynamic> userData = {
@@ -737,7 +513,6 @@ class AuthController extends GetxController {
       'isRejected': false,
     };
 
-    // بيانات إضافية للسائق
     if (selectedUserType.value == UserType.driver) {
       userData.addAll({
         'additionalData': {
@@ -773,7 +548,7 @@ class AuthController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.green,
         colorText: Colors.white,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       );
     } catch (firestoreError) {
       logger.w('خطأ في حفظ البيانات في Firestore: $firestoreError');
@@ -781,47 +556,49 @@ class AuthController extends GetxController {
     }
   }
 
-  /// Firestore write مع retry logic
   Future<void> _firestoreWriteWithRetry(Future<void> Function() operation,
       {int maxRetries = 3}) async {
     int retryCount = 0;
     while (retryCount < maxRetries) {
       try {
         await operation();
-        return; // نجحت العملية
+        return;
       } catch (e) {
         retryCount++;
         if (retryCount >= maxRetries) {
-          rethrow; // فشلت جميع المحاولات
+          rethrow;
         }
-        // انتظار قبل المحاولة التالية
+
         await Future.delayed(Duration(seconds: retryCount));
       }
     }
   }
 
-  /// حفظ حالة تسجيل الدخول
-  Future<void> _saveLoginState() async {
+Future<void> _saveLoginState() async {
     try {
       final box = GetStorage();
-      box.write('is_logged_in', true);
-      box.write('user_id', currentUser.value!.id);
-      box.write('user_type', currentUser.value!.userType.toString());
-      box.write('user_name', currentUser.value!.name);
-      box.write('user_phone', currentUser.value!.phone);
-      if (currentUser.value!.email.isNotEmpty) {
-        box.write('user_email', currentUser.value!.email);
-      }
-      if (currentUser.value!.profileImage != null) {
-        box.write('user_profile_image', currentUser.value!.profileImage!);
+      if (currentUser.value != null) { // Add null check here
+        box.write('is_logged_in', true);
+        box.write('user_id', currentUser.value!.id);
+        box.write('user_type', currentUser.value!.userType.toString());
+        box.write('user_name', currentUser.value!.name);
+        box.write('user_phone', currentUser.value!.phone);
+        if (currentUser.value!.email.isNotEmpty) {
+          box.write('user_email', currentUser.value!.email);
+        }
+        if (currentUser.value!.profileImage != null) {
+          box.write('user_profile_image', currentUser.value!.profileImage!);
+        }
+      } else {
+        logger.w('Cannot save login state: currentUser.value is null.');
+        await _clearSavedLoginState(); // Clear any potentially stale state
       }
     } catch (e) {
       logger.w('خطأ في حفظ حالة تسجيل الدخول: $e');
     }
   }
 
-  /// تحميل حالة تسجيل الدخول
-  Future<void> _loadLoginState() async {
+  Future<void> loadLoginState() async {
     try {
       final box = GetStorage();
       final isLoggedInSaved = box.read('is_logged_in') ?? false;
@@ -831,7 +608,7 @@ class AuthController extends GetxController {
         final String? userType = box.read('user_type');
 
         if (userId != null && userType != null) {
-          // تحميل بيانات المستخدم من Firestore
+          logger.i('✅ تحميل بيانات المستخدم من التخزين: $userId');
           await loadUserData(userId);
 
           if (currentUser.value != null) {
@@ -840,17 +617,25 @@ class AuthController extends GetxController {
               (e) => e.toString() == userType,
               orElse: () => UserType.rider,
             );
+            logger.i('✅ تم تحميل بيانات المستخدم بنجاح');
+          } else {
+            logger.w('⚠️ فشل في تحميل بيانات المستخدم - مسح التخزين');
+            await _clearSavedLoginState();
           }
+        } else {
+          logger.w('⚠️ بيانات تسجيل دخول غير كاملة - مسح التخزين');
+          await _clearSavedLoginState();
         }
+      } else {
+        logger.i('🆕 لا توجد حالة تسجيل دخول محفوظة');
       }
     } catch (e) {
-      logger.w('خطأ في تحميل حالة تسجيل الدخول: $e');
+      logger.e('❌ خطأ في تحميل حالة تسجيل الدخول: $e');
+      await _clearSavedLoginState();
     }
   }
 
-  /// إرسال رمز التحقق (للاستخدام المستقبلي)
   Future<void> sendOTP() async {
-    // TODO: سيتم تفعيله لاحقاً
     Get.snackbar(
       'قريباً',
       'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
@@ -860,9 +645,7 @@ class AuthController extends GetxController {
     );
   }
 
-  /// التحقق من رمز OTP (للاستخدام المستقبلي)
   Future<void> verifyOTP(String otp) async {
-    // TODO: سيتم تفعيله لاحقاً
     Get.snackbar(
       'قريباً',
       'تسجيل الدخول بالهاتف سيكون متاحاً قريباً',
@@ -872,12 +655,6 @@ class AuthController extends GetxController {
     );
   }
 
-  // /// تسجيل الدخول بـ Credential (للاستخدام المستقبلي)
-  // Future<void> signInWithCredential(PhoneAuthCredential credential) async {
-  //   // TODO: سيتم تفعيله لاحقاً
-  // }
-
-  /// إكمال الملف الشخصي
   Future<void> completeProfile({
     required String name,
     required String email,
@@ -916,7 +693,6 @@ class AuthController extends GetxController {
         additionalData: additionalData,
       );
 
-      // حفظ البيانات في Firestore
       await _firestore.collection('users').doc(user.id).set(user.toMap());
 
       currentUser.value = user;
@@ -945,7 +721,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// تحديث بيانات المستخدم
   Future<void> updateUser(UserModel updatedUser) async {
     try {
       await _firestore
@@ -972,7 +747,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// تحديث الرصيد
   Future<void> updateBalance(double amount) async {
     if (currentUser.value == null) return;
 
@@ -987,23 +761,14 @@ class AuthController extends GetxController {
     }
   }
 
-  /// تسجيل الخروج
   Future<void> signOut() async {
     try {
-      // تسجيل الخروج من Google بشكل آمن (isSignedIn أزيلت في v7)
-      // لا حاجة لتسجيل خروج منفصل من GoogleSignIn في v7
-
       await _auth.signOut();
       currentUser.value = null;
       isLoggedIn.value = false;
 
-      // مسح البيانات المحلية
-      _clearControllers();
-
-      // مسح البيانات المحفوظة
       await _clearSavedLoginState();
 
-      // إعادة تعيين تهيئة شاشة الوجهة الأولى للراكب
       try {
         final box = GetStorage();
         await box.remove('rider_opened_destination_once');
@@ -1020,7 +785,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// مسح البيانات المحفوظة
   Future<void> _clearSavedLoginState() async {
     try {
       final box = GetStorage();
@@ -1036,7 +800,6 @@ class AuthController extends GetxController {
     }
   }
 
-  /// إعادة إرسال رمز التحقق (للاستخدام المستقبلي)
   Future<void> resendOTP() async {
     Get.snackbar(
       'قريباً',
@@ -1047,94 +810,111 @@ class AuthController extends GetxController {
     );
   }
 
-  /// تحديث حالة الموافقة على السائق (للأدمن)
+  // دالة مساعدة لتحديث حالة السائق (للموافقة والرفض)
+  Future<bool> _updateDriverStatus(
+      String driverId, Map<String, dynamic> statusData) async {
+    try {
+      final adminId = currentUser.value?.id;
+      if (adminId == null) {
+        throw Exception('لم يتم العثور على معرف الأدمن');
+      }
+
+      final Map<String, dynamic> dataToUpdate = {
+        ...statusData,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await _firestore.collection('users').doc(driverId).update(dataToUpdate);
+      return true;
+    } catch (e) {
+      logger.w('خطأ في تحديث حالة السائق: $e');
+      return false;
+    }
+  }
+
   Future<bool> approveDriver(String driverId) async {
-    try {
-      final adminId = currentUser.value?.id;
-      if (adminId == null) throw Exception('لم يتم العثور على معرف الأدمن');
-
-      final Map<String, dynamic> approvedData = {
-        'isApproved': true,
-        'approvedAt': DateTime.now(),
-        'status': 'approved',
-        'approvedBy': adminId,
-        'isRejected': false,
-        'rejectionReason': null,
-        'updatedAt': DateTime.now(),
-      };
-
-      // حاول على drivers أولاً ثم users للتوافقية
-      try {
-        await _firestore
-            .collection('drivers')
-            .doc(driverId)
-            .update(approvedData);
-      } catch (_) {
-        await _firestore.collection('users').doc(driverId).update(approvedData);
-      }
-
-      return true;
-    } catch (e) {
-      logger.w('خطأ في الموافقة على السائق: $e');
-      return false;
-    }
+    final Map<String, dynamic> approvedData = {
+      'isApproved': true,
+      'approvedAt': FieldValue.serverTimestamp(),
+      'status': 'approved',
+      'approvedBy': currentUser.value?.id,
+      'isRejected': false,
+      'rejectionReason': FieldValue.delete(), // حذف سبب الرفض عند الموافقة
+    };
+    return _updateDriverStatus(driverId, approvedData);
   }
 
-  /// رفض السائق (للأدمن)
   Future<bool> rejectDriver(String driverId, String reason) async {
+    final Map<String, dynamic> rejectedData = {
+      'isRejected': true,
+      'status': 'rejected',
+      'rejectionReason': reason,
+      'rejectedAt': FieldValue.serverTimestamp(),
+      'rejectedBy': currentUser.value?.id,
+      'isApproved': false,
+    };
+    return _updateDriverStatus(driverId, rejectedData);
+  }
+
+  Future<void> updateUserRiderType(String riderType) async {
     try {
-      final adminId = currentUser.value?.id;
-      if (adminId == null) throw Exception('لم يتم العثور على معرف الأدمن');
+      final user = currentUser.value;
+      if (user == null || user.userType != UserType.rider) return;
 
-      final Map<String, dynamic> rejectedData = {
-        'isRejected': true,
-        'status': 'rejected',
-        'rejectionReason': reason,
-        'rejectedAt': DateTime.now(),
-        'rejectedBy': adminId,
-        'isApproved': false,
-        'updatedAt': DateTime.now(),
-      };
+      await _firestore.collection('users').doc(user.id).update({
+        'riderType': riderType,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
-      try {
-        await _firestore
-            .collection('drivers')
-            .doc(driverId)
-            .update(rejectedData);
-      } catch (_) {
-        await _firestore.collection('users').doc(driverId).update(rejectedData);
-      }
+      currentUser.value = user.copyWith(riderType: riderType);
 
-      return true;
+      logger.i('✅ تم تحديث نوع السائق إلى: $riderType');
     } catch (e) {
-      logger.w('خطأ في رفض السائق: $e');
-      return false;
+      logger.e('خطأ في تحديث نوع السائق: $e');
+      rethrow;
     }
   }
 
-  // String _formatPhoneNumber(String phone) {
-  //   phone = phone.replaceAll(RegExp(r'[^\\d]'), '');
-  //   if (!phone.startsWith('+964')) {
-  //     if (phone.startsWith('964')) {
-  //       phone = '+$phone';
-  //     } else if (phone.startsWith('0')) {
-  //       phone = '+964${phone.substring(1)}';
-  //     } else {
-  //       phone = '+964$phone';
-  //     }
-  //   }
-  //   return phone;
-  // }
+  Future<bool> checkAccountSuspension() async {
+    try {
+      final user = currentUser.value;
+      if (user == null) return false;
 
-  /// مسح المتحكمات
-  void _clearControllers() {
-    phoneController.clear();
-    otpController.clear();
-    nameController.clear();
-    emailController.clear();
-    phoneNumber.value = '';
-    verificationId.value = '';
-    selectedUserType.value = null;
+      final userDoc = await _firestore.collection('users').doc(user.id).get();
+      if (!userDoc.exists) return false;
+
+      final additionalData =
+          userDoc.data()?['additionalData'] as Map<String, dynamic>?;
+      final isSuspended = additionalData?['isSuspended'] ?? false;
+
+      if (isSuspended) {
+        final suspensionEndDate =
+            (additionalData?['suspensionEndDate'] as Timestamp?)?.toDate();
+
+        // إذا انتهت فترة التعليق، قم بإعادة تنشيط الحساب
+        if (suspensionEndDate != null &&
+            DateTime.now().isAfter(suspensionEndDate)) {
+          await _firestore.collection('users').doc(user.id).update({
+            'additionalData.isSuspended': false,
+            'additionalData.suspensionReason': FieldValue.delete(),
+            'additionalData.suspensionEndDate': FieldValue.delete(),
+            'additionalData.suspensionCreatedAt': FieldValue.delete(),
+            'additionalData.reactivatedAt': FieldValue.serverTimestamp(),
+          });
+
+          return false; // لم يعد معلقاً
+        }
+
+        // إذا كان الحساب معلقًا ولم تنته فترة التعليق
+        Get.offAll(() => const AccountSuspendedView());
+        return true;
+      }
+
+      return false; // الحساب غير معلق
+    } catch (e) {
+      logger.w('خطأ في فحص حالة التعليق: $e');
+      return false;
+    }
   }
 
   @override

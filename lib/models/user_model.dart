@@ -1,32 +1,77 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum UserType { rider, driver }
+enum UserType { rider, driver, admin }
+
+enum DriverStatus { pending, approved, rejected, suspended }
+
+enum VehicleType { car, motorcycle, van, truck }
 
 class UserModel {
   final String id;
   final String name;
   final String phone;
+  final String? phoneNumber;
   final String email;
   final String? profileImage;
   final UserType userType;
   late final double balance;
   final DateTime createdAt;
   final bool isActive;
-  final bool isVerified; // حالة تأكيد الإدارة
-  final bool isApproved; // حالة موافقة الإدارة
-  final DateTime? approvedAt; // تاريخ الموافقة
-  final String? approvedBy; // من وافق عليه
-  final bool isRejected; // حالة رفض الإدارة
-  final DateTime? rejectedAt; // تاريخ الرفض
-  final String? rejectedBy; // من رفض الطلب
-  final String? rejectionReason; // سبب الرفض
-  final bool isProfileComplete; // هل اكتمل الملف الشخصي
+  final bool isVerified;
+  final bool isApproved;
+  final DateTime? approvedAt;
+  final String? approvedBy;
+  final bool isRejected;
+  final DateTime? rejectedAt;
+  final String? rejectedBy;
+  final String? rejectionReason;
+  final bool isProfileComplete;
+  final String? fcmToken;
+
+  // Driver Specific Fields
+  final String? vehicleYear; // Changed to String? to accommodate mixed data, or int? if strictly numbers
+  final String? plateNumber;
+  final String? provinceCode;
+  final String? plateLetter;
+  final String? nationalId;
+  final String? nationalIdImage;
+  final String? drivingLicense;
+  final String? drivingLicenseImage;
+  final String? vehicleLicense;
+  final String? vehicleLicenseImage;
+  final VehicleType? vehicleType;
+  final String? vehicleModel;
+  final String? vehicleColor;
+  final String? vehicleImage;
+  final String? insuranceImage;
+  final String? backgroundCheckImage;
+  final DriverStatus? driverStatus;
+  final bool? isOnline;
+  final bool? isAvailable;
+  final String? currentLocation;
+  final double? currentLatitude;
+  final double? currentLongitude;
+  final int? totalTrips;
+  final double? totalEarnings;
+  final double? rating;
+  final int? ratingCount;
+  final String? emergencyContact;
+  final String? emergencyContactName;
+  final List<String>? workingAreas;
+  final String? provinceName;
+
+  // Rider Specific Fields
+  final String? riderType; // Renamed from RiderType for Dart conventions
+  final List<String>? favoriteLocations;
+  final double? totalSpent;
+
   final Map<String, dynamic>? additionalData;
 
   UserModel({
     required this.id,
     required this.name,
     required this.phone,
+    this.phoneNumber,
     required this.email,
     this.profileImage,
     required this.userType,
@@ -42,45 +87,160 @@ class UserModel {
     this.rejectedBy,
     this.rejectionReason,
     this.isProfileComplete = false,
+    this.fcmToken,
+    this.vehicleYear,
+    this.plateNumber,
+    this.provinceCode,
+    this.plateLetter,
+    this.nationalId,
+    this.nationalIdImage,
+    this.drivingLicense,
+    this.drivingLicenseImage,
+    this.vehicleLicense,
+    this.vehicleLicenseImage,
+    this.vehicleType,
+    this.vehicleModel,
+    this.vehicleColor,
+    this.vehicleImage,
+    this.insuranceImage,
+    this.backgroundCheckImage,
+    this.driverStatus,
+    this.isOnline,
+    this.isAvailable,
+    this.currentLocation,
+    this.currentLatitude,
+    this.currentLongitude,
+    this.totalTrips,
+    this.totalEarnings,
+    this.rating,
+    this.ratingCount,
+    this.emergencyContact,
+    this.emergencyContactName,
+    this.workingAreas,
+    this.provinceName,
+    this.riderType, // Renamed
+    this.favoriteLocations,
+    this.totalSpent,
     this.additionalData,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    // Safely get additionalData
+    final additionalData = map['additionalData'] as Map<String, dynamic>?;
+
+    // Helper to parse enum safely
+    T? parseEnum<T>(dynamic value, List<T> values, T Function(String) fromString, {T? orElse}) {
+      if (value == null) return null;
+      try {
+        // Handle cases like 'UserType.rider' or just 'rider'
+        String enumString = value.toString().split('.').last;
+        return fromString(enumString);
+      } catch (e) {
+        return orElse;
+      }
+    }
+
+    // Helper to safely convert to double
+    double? toDouble(dynamic value) {
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value);
+      return null;
+    }
+
+    // Helper to safely convert to int
+    int? toInt(dynamic value) {
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value);
+      return null;
+    }
+
+    // Helper to safely convert to String
+    String? toString(dynamic value) {
+      if (value == null) return null;
+      return value.toString();
+    }
+
+
     return UserModel(
-      id: map['id'] ?? '',
-      name: map['name'] ?? '',
-      phone: map['phone'] ?? '',
-      email: map['email'] ?? '',
-      profileImage: map['profileImage'],
-      userType: UserType.values.firstWhere(
-        (e) => e.toString() == 'UserType.${map['userType']}',
-        orElse: () => UserType.rider,
-      ),
-      balance: (map['balance'] ?? 0.0).toDouble(),
+      id: toString(map['id']) ?? '',
+      name: toString(map['name']) ?? '',
+      phone: toString(map['phone']) ?? '',
+      phoneNumber: toString(map['phoneNumber']),
+      email: toString(map['email']) ?? '',
+      profileImage: toString(map['profileImage']),
+      userType: parseEnum(map['userType'], UserType.values, (s) => UserType.values.firstWhere((e) => e.name == s.toLowerCase()), orElse: UserType.rider)!,
+      // Prioritize direct fields, then additionalData, then safe conversion
+      plateNumber: toString(map['vehiclePlateNumber']) ?? toString(map['plateNumber']) ?? toString(additionalData?['plateNumber']),
+      vehicleYear: toString(map['vehicleYear']) ?? toString(additionalData?['vehicleYear']), // Ensure it's handled as String
+      balance: toDouble(map['balance']) ?? 0.0,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: map['isActive'] ?? true,
       isVerified: map['isVerified'] ?? false,
       isApproved: map['isApproved'] ?? false,
       approvedAt: (map['approvedAt'] as Timestamp?)?.toDate(),
-      approvedBy: map['approvedBy'],
+      approvedBy: toString(map['approvedBy']),
       isRejected: map['isRejected'] ?? false,
       rejectedAt: (map['rejectedAt'] as Timestamp?)?.toDate(),
-      rejectedBy: map['rejectedBy'],
-      rejectionReason: map['rejectionReason'],
+      rejectedBy: toString(map['rejectedBy']),
+      rejectionReason: toString(map['rejectionReason']),
       isProfileComplete: map['isProfileComplete'] ?? false,
-      additionalData: map['additionalData'],
+      fcmToken: toString(map['fcmToken']),
+      nationalId: toString(map['nationalId']),
+      nationalIdImage: toString(map['nationalIdImage']) ?? toString(additionalData?['nationalIdImageFront']) ?? toString(additionalData?['idCardImage']),
+      drivingLicense: toString(map['drivingLicense']),
+      drivingLicenseImage: toString(map['drivingLicenseImage']) ?? toString(additionalData?['drivingLicenseImageFront']) ?? toString(additionalData?['licenseImage']),
+      vehicleLicense: toString(map['vehicleLicense']),
+      vehicleLicenseImage: toString(map['vehicleLicenseImage']),
+      vehicleType: parseEnum(
+        map['vehicleType'] ?? additionalData?['carType'],
+        VehicleType.values,
+        (s) => VehicleType.values.firstWhere((e) => e.name == s.toLowerCase()),
+      ),
+      vehicleModel: toString(map['vehicleModel']) ?? toString(additionalData?['carModel']),
+      vehicleColor: toString(map['vehicleColor']) ?? toString(additionalData?['carColor']),
+      plateLetter: toString(map['plateLetter']) ?? toString(additionalData?['plateLetter']),
+      vehicleImage: toString(map['vehicleImage']) ?? toString(additionalData?['carImage']),
+      insuranceImage: toString(map['insuranceImage']) ?? toString(additionalData?['insuranceImage']),
+      backgroundCheckImage: toString(map['backgroundCheckImage']),
+      driverStatus: parseEnum(
+        map['driverStatus'],
+        DriverStatus.values,
+        (s) => DriverStatus.values.firstWhere((e) => e.name == s.toLowerCase()),
+        orElse: DriverStatus.pending,
+      ),
+      isOnline: map['isOnline'] ?? additionalData?['isOnline'],
+      isAvailable: map['isAvailable'] ?? additionalData?['isAvailable'],
+      currentLocation: toString(map['currentLocation']),
+      currentLatitude: toDouble(map['currentLatitude'] ?? map['currentLat'] ?? additionalData?['currentLat']),
+      currentLongitude: toDouble(map['currentLongitude'] ?? map['currentLng'] ?? additionalData?['currentLng']),
+      totalTrips: toInt(map['totalTrips']),
+      totalEarnings: toDouble(map['totalEarnings']),
+      rating: toDouble(map['rating']),
+      ratingCount: toInt(map['ratingCount']),
+      emergencyContact: toString(map['emergencyContact']) ?? toString(additionalData?['emergencyContact']),
+      emergencyContactName: toString(map['emergencyContactName']),
+      workingAreas: map['workingAreas'] != null ? List<String>.from(map['workingAreas']) : null,
+      provinceCode: toString(map['provinceCode']),
+      provinceName: toString(map['provinceName']) ?? toString(additionalData?['provinceName']),
+      riderType: toString(map['riderType']), // ✅ Fixed: was RiderType (capital R)
+      favoriteLocations: map['favoriteLocations'] != null ? List<String>.from(map['favoriteLocations']) : null,
+      totalSpent: toDouble(map['totalSpent']),
+      additionalData: map['additionalData'] != null ? Map<String, dynamic>.from(map['additionalData']) : null,
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
+    final map = <String, dynamic>{
       'id': id,
       'name': name,
       'phone': phone,
+      'phoneNumber': phoneNumber,
       'email': email,
       'profileImage': profileImage,
       'userType': userType.name,
       'balance': balance,
+      'vehicleYear': vehicleYear,
+      'plateNumber': plateNumber, // Use plateNumber consistently
       'createdAt': Timestamp.fromDate(createdAt),
       'isActive': isActive,
       'isVerified': isVerified,
@@ -92,19 +252,78 @@ class UserModel {
       'rejectedBy': rejectedBy,
       'rejectionReason': rejectionReason,
       'isProfileComplete': isProfileComplete,
-      'additionalData': additionalData,
+      'fcmToken': fcmToken,
+      'nationalId': nationalId,
+      'nationalIdImage': nationalIdImage,
+      'drivingLicense': drivingLicense,
+      'drivingLicenseImage': drivingLicenseImage,
+      'vehicleLicense': vehicleLicense,
+      'vehicleLicenseImage': vehicleLicenseImage,
+      'vehicleType': vehicleType?.name,
+      'vehicleModel': vehicleModel,
+      'vehicleColor': vehicleColor,
+      'plateLetter': plateLetter,
+      'vehicleImage': vehicleImage,
+      'insuranceImage': insuranceImage,
+      'backgroundCheckImage': backgroundCheckImage,
+      'driverStatus': driverStatus?.name,
+      'isOnline': isOnline,
+      'isAvailable': isAvailable,
+      'currentLocation': currentLocation,
+      'currentLatitude': currentLatitude,
+      'currentLongitude': currentLongitude,
+      'totalTrips': totalTrips,
+      'totalEarnings': totalEarnings,
+      'rating': rating,
+      'ratingCount': ratingCount,
+      'emergencyContact': emergencyContact,
+      'emergencyContactName': emergencyContactName,
+      'workingAreas': workingAreas,
+      'provinceCode': provinceCode,
+      'provinceName': provinceName,
+      'riderType': riderType, // Renamed
+      'lastActive': FieldValue.serverTimestamp(),
+      'favoriteLocations': favoriteLocations,
+      'totalSpent': totalSpent,
     };
+
+    // Clean additionalData to avoid duplication and add it if not empty
+    if (additionalData != null && additionalData!.isNotEmpty) {
+      final cleanedAdditionalData = Map<String, dynamic>.from(additionalData!);
+
+      // List of fields that are now top-level and should be removed from additionalData
+      final topLevelFields = [
+        'currentLat', 'currentLng', 'carModel', 'carColor', 'carType', 'carImage',
+        'plateNumber', 'plateLetter', 'provinceName', 'licenseNumber', // This was a field in the snippet, removed from map to avoid confusion.
+        'idCardImage', 'drivingLicenseImageFront', 'drivingLicenseImageBack',
+        'nationalIdImageFront', 'nationalIdImageBack', 'insuranceImage',
+        'isOnline', 'isAvailable', 'emergencyContact', 'vehicleYear'
+      ];
+
+      for (var field in topLevelFields) {
+        cleanedAdditionalData.remove(field);
+      }
+
+      if (cleanedAdditionalData.isNotEmpty) {
+        map['additionalData'] = cleanedAdditionalData;
+      }
+    }
+
+    return map;
   }
 
   UserModel copyWith({
     String? id,
     String? name,
     String? phone,
+    String? phoneNumber,
     String? email,
     String? profileImage,
     UserType? userType,
     double? balance,
     DateTime? createdAt,
+    String? vehicleYear,
+    String? plateNumber,
     bool? isActive,
     bool? isVerified,
     bool? isApproved,
@@ -115,12 +334,45 @@ class UserModel {
     String? rejectedBy,
     String? rejectionReason,
     bool? isProfileComplete,
+    String? fcmToken,
+    String? nationalId,
+    String? nationalIdImage,
+    String? drivingLicense,
+    String? drivingLicenseImage,
+    String? vehicleLicense,
+    String? vehicleLicenseImage,
+    VehicleType? vehicleType,
+    String? vehicleModel,
+    String? vehicleColor,
+    String? provinceCode,
+    String? plateLetter,
+    String? vehicleImage,
+    String? insuranceImage,
+    String? backgroundCheckImage,
+    DriverStatus? driverStatus,
+    bool? isOnline,
+    bool? isAvailable,
+    String? currentLocation,
+    double? currentLatitude,
+    double? currentLongitude,
+    int? totalTrips,
+    double? totalEarnings,
+    double? rating,
+    int? ratingCount,
+    String? emergencyContact,
+    String? emergencyContactName,
+    List<String>? workingAreas,
+    String? provinceName,
+    String? riderType,
+    List<String>? favoriteLocations,
+    double? totalSpent,
     Map<String, dynamic>? additionalData,
   }) {
     return UserModel(
       id: id ?? this.id,
       name: name ?? this.name,
       phone: phone ?? this.phone,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       email: email ?? this.email,
       profileImage: profileImage ?? this.profileImage,
       userType: userType ?? this.userType,
@@ -133,201 +385,97 @@ class UserModel {
       approvedBy: approvedBy ?? this.approvedBy,
       isRejected: isRejected ?? this.isRejected,
       rejectedAt: rejectedAt ?? this.rejectedAt,
+      plateNumber: plateNumber ?? this.plateNumber,
+      vehicleYear: vehicleYear ?? this.vehicleYear,
       rejectedBy: rejectedBy ?? this.rejectedBy,
       rejectionReason: rejectionReason ?? this.rejectionReason,
       isProfileComplete: isProfileComplete ?? this.isProfileComplete,
+      fcmToken: fcmToken ?? this.fcmToken,
+      nationalId: nationalId ?? this.nationalId,
+      nationalIdImage: nationalIdImage ?? this.nationalIdImage,
+      drivingLicense: drivingLicense ?? this.drivingLicense,
+      drivingLicenseImage: drivingLicenseImage ?? this.drivingLicenseImage,
+      vehicleLicense: vehicleLicense ?? this.vehicleLicense,
+      vehicleLicenseImage: vehicleLicenseImage ?? this.vehicleLicenseImage,
+      vehicleType: vehicleType ?? this.vehicleType,
+      vehicleModel: vehicleModel ?? this.vehicleModel,
+      vehicleColor: vehicleColor ?? this.vehicleColor,
+      plateLetter: plateLetter ?? this.plateLetter,
+      vehicleImage: vehicleImage ?? this.vehicleImage,
+      insuranceImage: insuranceImage ?? this.insuranceImage,
+      backgroundCheckImage: backgroundCheckImage ?? this.backgroundCheckImage,
+      driverStatus: driverStatus ?? this.driverStatus,
+      isOnline: isOnline ?? this.isOnline,
+      isAvailable: isAvailable ?? this.isAvailable,
+      currentLocation: currentLocation ?? this.currentLocation,
+      currentLatitude: currentLatitude ?? this.currentLatitude,
+      currentLongitude: currentLongitude ?? this.currentLongitude,
+      totalTrips: totalTrips ?? this.totalTrips,
+      totalEarnings: totalEarnings ?? this.totalEarnings,
+      rating: rating ?? this.rating,
+      ratingCount: ratingCount ?? this.ratingCount,
+      emergencyContact: emergencyContact ?? this.emergencyContact,
+      emergencyContactName: emergencyContactName ?? this.emergencyContactName,
+      workingAreas: workingAreas ?? this.workingAreas,
+      provinceCode: provinceCode ?? this.provinceCode,
+      provinceName: provinceName ?? this.provinceName,
+      riderType: riderType ?? this.riderType,
+      favoriteLocations: favoriteLocations ?? this.favoriteLocations,
+      totalSpent: totalSpent ?? this.totalSpent,
       additionalData: additionalData ?? this.additionalData,
     );
   }
-}
 
-class DriverModel extends UserModel {
-  final String carType;
-  final String carNumber;
-  final String licenseNumber;
-  final String? carImage;
-  final bool isOnline;
-  final double? currentLat;
-  final double? currentLng;
+  bool get isDriver => userType == UserType.driver;
+  bool get isRider => userType == UserType.rider;
 
-  // بيانات إضافية جديدة
-  final String carModel; // موديل السيارة
-  final String carColor; // لون السيارة
-  final String carYear; // سنة السيارة
-  final List<String> workingAreas; // مناطق العمل
-  final String? licenseImage; // صورة الرخصة
-  final String? idCardImage; // صورة الهوية
-  @override
-  final bool isProfileComplete; // هل اكتمل الملف الشخصي
-  final String? vehicleRegistrationImage; // صورة تسجيل السيارة
-  final String? insuranceImage; // صورة التأمين
+  bool get isDriverProfileComplete {
+    if (!isDriver) return false;
+    // Ensure all required driver fields are not null and not empty for Strings
+    return nationalId != null &&
+        nationalId!.isNotEmpty &&
+        nationalIdImage != null &&
+        nationalIdImage!.isNotEmpty &&
+        drivingLicense != null &&
+        drivingLicense!.isNotEmpty &&
+        drivingLicenseImage != null &&
+        drivingLicenseImage!.isNotEmpty &&
+        vehicleLicense != null &&
+        vehicleLicense!.isNotEmpty &&
+        vehicleLicenseImage != null &&
+        vehicleLicenseImage!.isNotEmpty &&
+        vehicleType != null &&
+        vehicleModel != null &&
+        vehicleModel!.isNotEmpty &&
+        vehicleColor != null &&
+        vehicleColor!.isNotEmpty &&
+        vehicleYear != null &&
+        vehicleYear!.isNotEmpty &&
+        plateNumber != null &&
+        plateNumber!.isNotEmpty &&
+        vehicleImage != null &&
+        vehicleImage!.isNotEmpty &&
+        insuranceImage != null &&
+        insuranceImage!.isNotEmpty;
+        // backgroundCheckImage is optional as per your toMap, but can be added here if truly mandatory
+  }
 
-  DriverModel({
-    required super.id,
-    required super.name,
-    required super.phone,
-    required super.email,
-    super.profileImage,
-    super.balance,
-    required super.createdAt,
-    super.isActive,
-    super.isVerified,
-    super.isApproved,
-    super.approvedAt,
-    super.approvedBy,
-    super.isRejected,
-    super.rejectedAt,
-    super.rejectedBy,
-    super.rejectionReason,
-    required this.carType,
-    required this.carNumber,
-    required this.licenseNumber,
-    this.carImage,
-    this.isOnline = false,
-    this.currentLat,
-    this.currentLng,
-    required this.carModel,
-    required this.carColor,
-    required this.carYear,
-    required this.workingAreas,
-    this.licenseImage,
-    this.idCardImage,
-    this.isProfileComplete = false,
-    this.vehicleRegistrationImage,
-    this.insuranceImage,
-  }) : super(
-          userType: UserType.driver,
-          additionalData: {
-            'carType': carType,
-            'carNumber': carNumber,
-            'licenseNumber': licenseNumber,
-            'carImage': carImage,
-            'isOnline': isOnline,
-            'currentLat': currentLat,
-            'currentLng': currentLng,
-            'carModel': carModel,
-            'carColor': carColor,
-            'carYear': carYear,
-            'workingAreas': workingAreas,
-            'licenseImage': licenseImage,
-            'idCardImage': idCardImage,
-            'isProfileComplete': isProfileComplete,
-            'vehicleRegistrationImage': vehicleRegistrationImage,
-            'insuranceImage': insuranceImage,
-          },
-        );
 
-  factory DriverModel.fromMap(Map<String, dynamic> map) {
-    final user = UserModel.fromMap(map);
-    final additionalData = map['additionalData'] as Map<String, dynamic>? ?? {};
+  bool get canReceiveRequests {
+    return isDriver &&
+        isActive &&
+        isApproved &&
+        isDriverProfileComplete &&
+        driverStatus == DriverStatus.approved;
+  }
 
-    return DriverModel(
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      email: user.email,
-      profileImage: user.profileImage,
-      balance: user.balance,
-      createdAt: user.createdAt,
-      isActive: user.isActive,
-      isVerified: user.isVerified,
-      isApproved: user.isApproved,
-      approvedAt: user.approvedAt,
-      approvedBy: user.approvedBy,
-      isRejected: user.isRejected,
-      rejectedAt: user.rejectedAt,
-      rejectedBy: user.rejectedBy,
-      rejectionReason: user.rejectionReason,
-      carType: additionalData['carType'] ?? '',
-      carNumber: additionalData['carNumber'] ?? '',
-      licenseNumber: additionalData['licenseNumber'] ?? '',
-      carImage: additionalData['carImage'],
-      isOnline: additionalData['isOnline'] ?? false,
-      currentLat: additionalData['currentLat']?.toDouble(),
-      currentLng: additionalData['currentLng']?.toDouble(),
-      carModel: additionalData['carModel'] ?? '',
-      carColor: additionalData['carColor'] ?? '',
-      carYear: additionalData['carYear'] ?? '',
-      workingAreas: List<String>.from(additionalData['workingAreas'] ?? []),
-      licenseImage: additionalData['licenseImage'],
-      idCardImage: additionalData['idCardImage'],
-      isProfileComplete: additionalData['isProfileComplete'] ?? false,
-      vehicleRegistrationImage: additionalData['vehicleRegistrationImage'],
-      insuranceImage: additionalData['insuranceImage'],
-    );
+  bool get isRiderProfileComplete {
+    if (!isRider) return false;
+    return name.isNotEmpty && phone.isNotEmpty && email.isNotEmpty;
   }
 
   @override
-  DriverModel copyWith({
-    String? id,
-    String? name,
-    String? phone,
-    String? email,
-    String? profileImage,
-    UserType? userType,
-    double? balance,
-    DateTime? createdAt,
-    bool? isActive,
-    bool? isVerified,
-    bool? isApproved,
-    DateTime? approvedAt,
-    String? approvedBy,
-    bool? isRejected,
-    DateTime? rejectedAt,
-    String? rejectedBy,
-    String? rejectionReason,
-    Map<String, dynamic>? additionalData,
-    String? carType,
-    String? carNumber,
-    String? licenseNumber,
-    String? carImage,
-    bool? isOnline,
-    double? currentLat,
-    double? currentLng,
-    String? carModel,
-    String? carColor,
-    String? carYear,
-    List<String>? workingAreas,
-    String? licenseImage,
-    String? idCardImage,
-    bool? isProfileComplete,
-    String? vehicleRegistrationImage,
-    String? insuranceImage,
-  }) {
-    return DriverModel(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      phone: phone ?? this.phone,
-      email: email ?? this.email,
-      profileImage: profileImage ?? this.profileImage,
-      balance: balance ?? this.balance,
-      createdAt: createdAt ?? this.createdAt,
-      isActive: isActive ?? this.isActive,
-      isVerified: isVerified ?? this.isVerified,
-      isApproved: isApproved ?? this.isApproved,
-      approvedAt: approvedAt ?? this.approvedAt,
-      approvedBy: approvedBy ?? this.approvedBy,
-      isRejected: isRejected ?? this.isRejected,
-      rejectedAt: rejectedAt ?? this.rejectedAt,
-      rejectedBy: rejectedBy ?? this.rejectedBy,
-      rejectionReason: rejectionReason ?? this.rejectionReason,
-      carType: carType ?? this.carType,
-      carNumber: carNumber ?? this.carNumber,
-      licenseNumber: licenseNumber ?? this.licenseNumber,
-      carImage: carImage ?? this.carImage,
-      isOnline: isOnline ?? this.isOnline,
-      currentLat: currentLat ?? this.currentLat,
-      currentLng: currentLng ?? this.currentLng,
-      carModel: carModel ?? this.carModel,
-      carColor: carColor ?? this.carColor,
-      carYear: carYear ?? this.carYear,
-      workingAreas: workingAreas ?? this.workingAreas,
-      licenseImage: licenseImage ?? this.licenseImage,
-      idCardImage: idCardImage ?? this.idCardImage,
-      isProfileComplete: isProfileComplete ?? this.isProfileComplete,
-      vehicleRegistrationImage:
-          vehicleRegistrationImage ?? this.vehicleRegistrationImage,
-      insuranceImage: insuranceImage ?? this.insuranceImage,
-    );
+  String toString() {
+    return 'UserModel(id: $id, name: $name, userType: $userType, isApproved: $isApproved)';
   }
 }

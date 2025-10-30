@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
-import 'package:transport_app/models/user_model.dart';
 import 'dart:async';
+
+import 'package:transport_app/models/user_model.dart';
 
 class VerifyOtpView extends StatefulWidget {
   const VerifyOtpView({super.key});
@@ -14,9 +15,10 @@ class VerifyOtpView extends StatefulWidget {
 
 class _VerifyOtpViewState extends State<VerifyOtpView> {
   final AuthController authController = Get.find();
-  List<TextEditingController> otpControllers = List.generate(6, (index) => TextEditingController());
+  List<TextEditingController> otpControllers =
+      List.generate(6, (index) => TextEditingController());
   List<FocusNode> otpFocusNodes = List.generate(6, (index) => FocusNode());
-  
+
   Timer? _resendTimer;
   int _resendCountdown = 60;
   bool _canResend = false;
@@ -76,32 +78,16 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // زر الرجوع
                 _buildBackButton(),
-                
                 const SizedBox(height: 40),
-                
-                // العنوان والوصف
                 _buildHeader(),
-                
                 const SizedBox(height: 60),
-                
-                // حقول إدخال OTP
                 _buildOtpInputs(),
-                
                 const SizedBox(height: 40),
-                
-                // زر التحقق
                 _buildVerifyButton(),
-                
                 const SizedBox(height: 30),
-                
-                // زر إعادة الإرسال
                 _buildResendSection(),
-                
                 const SizedBox(height: 30),
-                
-                // معلومات إضافية
                 _buildFooterInfo(),
               ],
             ),
@@ -142,40 +128,36 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
             color: Colors.white,
           ),
         ),
-        
         const SizedBox(height: 12),
-        
         Obx(() => Text(
-          'أدخل الرمز المرسل إلى ${authController.phoneController.text}',
-          style: const TextStyle(
-            fontSize: 16,
-            color: Colors.white70,
-          ),
-        )),
-        
+              'أدخل الرمز المرسل إلى ${authController.phoneController.text}',
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.white70,
+              ),
+            )),
         const SizedBox(height: 8),
-        
         Obx(() => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _getUserTypeColor().withOpacity(0.2),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _getUserTypeColor(),
-              width: 1,
-            ),
-          ),
-          child: Text(
-            authController.selectedUserType.value == UserType.rider 
-                ? '📱 حساب راكب' 
-                : '🚗 حساب سائق',
-            style: TextStyle(
-              fontSize: 14,
-              color: _getUserTypeColor(),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        )),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: _getUserTypeColor().withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _getUserTypeColor(),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                authController.selectedUserType.value == UserType.rider
+                    ? '📱 حساب راكب'
+                    : '🚗 حساب سائق',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: _getUserTypeColor(),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            )),
       ],
     );
   }
@@ -205,18 +187,12 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
               color: Colors.black87,
             ),
           ),
-          
           const SizedBox(height: 24),
-          
-          // صف حقول OTP
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: List.generate(6, (index) => _buildOtpField(index)),
           ),
-          
           const SizedBox(height: 20),
-          
-          // معلومة توضيحية
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -260,8 +236,8 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
         color: Colors.grey.shade100,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: otpFocusNodes[index].hasFocus 
-              ? _getUserTypeColor() 
+          color: otpFocusNodes[index].hasFocus
+              ? _getUserTypeColor()
               : Colors.grey.shade300,
           width: 2,
         ),
@@ -285,22 +261,18 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
         ),
         onChanged: (value) {
           if (value.length == 1) {
-            // انتقل للحقل التالي
             if (index < 5) {
               FocusScope.of(context).requestFocus(otpFocusNodes[index + 1]);
             } else {
-              // آخر حقل - تحقق من OTP تلقائياً
               FocusScope.of(context).unfocus();
               _verifyOtp();
             }
           } else if (value.isEmpty && index > 0) {
-            // ارجع للحقل السابق
             FocusScope.of(context).requestFocus(otpFocusNodes[index - 1]);
           }
-          setState(() {}); // تحديث الواجهة
+          setState(() {});
         },
         onTap: () {
-          // إذا كان الحقل فارغ ولكن الحقول السابقة مملوءة، انتقل للحقل الصحيح
           for (int i = 0; i < index; i++) {
             if (otpControllers[i].text.isEmpty) {
               FocusScope.of(context).requestFocus(otpFocusNodes[i]);
@@ -314,39 +286,41 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
 
   Widget _buildVerifyButton() {
     return Obx(() => SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: authController.isLoading.value 
-            ? null 
-            : _isOtpComplete() ? _verifyOtp : null,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _getUserTypeColor(),
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 8,
-          shadowColor: _getUserTypeColor().withOpacity(0.4),
-        ),
-        child: authController.isLoading.value
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Text(
-                'تأكيد الرمز',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+          width: double.infinity,
+          height: 56,
+          child: ElevatedButton(
+            onPressed: authController.isLoading.value
+                ? null
+                : _isOtpComplete()
+                    ? _verifyOtp
+                    : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _getUserTypeColor(),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
-      ),
-    ));
+              elevation: 8,
+              shadowColor: _getUserTypeColor().withOpacity(0.4),
+            ),
+            child: authController.isLoading.value
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text(
+                    'تأكيد الرمز',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+          ),
+        ));
   }
 
   Widget _buildResendSection() {
@@ -359,14 +333,13 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
             color: Colors.white70,
           ),
         ),
-        
         const SizedBox(height: 12),
-        
         _canResend
             ? GestureDetector(
                 onTap: _resendOtp,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(25),
@@ -386,7 +359,8 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
                 ),
               )
             : Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.grey.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(25),
@@ -454,18 +428,16 @@ class _VerifyOtpViewState extends State<VerifyOtpView> {
 
   void _resendOtp() {
     if (!_canResend) return;
-    
+
     authController.resendOTP();
     _startResendTimer();
-    
-    // مسح الحقول
+
     for (var controller in otpControllers) {
       controller.clear();
     }
-    
-    // العودة للحقل الأول
+
     FocusScope.of(context).requestFocus(otpFocusNodes[0]);
-    
+
     Get.snackbar(
       'تم الإرسال',
       'تم إرسال رمز التحقق الجديد',

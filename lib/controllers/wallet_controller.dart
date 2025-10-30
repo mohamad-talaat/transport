@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/main.dart';
- import 'package:transport_app/views/rider/rider_wallet_view.dart';
+import 'package:transport_app/views/rider/rider_wallet_view.dart';
 
 class WalletController extends GetxController {
   static WalletController get to => Get.find();
@@ -11,14 +11,11 @@ class WalletController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthController _authController = Get.find<AuthController>();
 
-  // Loading states
   final RxBool isLoading = false.obs;
   final RxBool isLoadingTransactions = false.obs;
 
-  // Transactions
   final RxList<TransactionModel> transactions = <TransactionModel>[].obs;
 
-  // Pagination
   DocumentSnapshot? _lastDocument;
   final RxBool hasMoreTransactions = true.obs;
   final int _pageSize = 20;
@@ -29,7 +26,6 @@ class WalletController extends GetxController {
     loadTransactions();
   }
 
-  /// تحميل العمليات المالية
   Future<void> loadTransactions({bool refresh = false}) async {
     if (refresh) {
       _lastDocument = null;
@@ -82,30 +78,27 @@ class WalletController extends GetxController {
       Get.snackbar(
         'خطأ',
         'فشل في تحميل العمليات المالية',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
       );
     } finally {
       isLoadingTransactions.value = false;
     }
   }
 
-  /// تحديث العمليات المالية
   Future<void> refreshTransactions() async {
     await loadTransactions(refresh: true);
   }
 
-  /// تحميل المزيد من العمليات
   Future<void> loadMoreTransactions() async {
     await loadTransactions();
   }
 
-  /// استخدام كود الشحن
   Future<void> redeemVoucher(String voucherCode) async {
     if (voucherCode.trim().isEmpty) {
       Get.snackbar(
         'خطأ',
         'يرجى إدخال كود الشحن',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
       );
       return;
     }
@@ -116,7 +109,6 @@ class WalletController extends GetxController {
     isLoading.value = true;
 
     try {
-      // البحث عن كود الشحن في قاعدة البيانات
       final voucherQuery = await _firestore
           .collection('vouchers')
           .where('code', isEqualTo: voucherCode.toUpperCase())
@@ -128,7 +120,7 @@ class WalletController extends GetxController {
         Get.snackbar(
           'كود غير صحيح',
           'كود الشحن غير صحيح أو مستخدم من قبل',
-          snackPosition: SnackPosition.BOTTOM,
+          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
@@ -139,24 +131,22 @@ class WalletController extends GetxController {
       final voucherData = voucherDoc.data();
       final amount = (voucherData['amount'] ?? 0.0).toDouble();
 
-      // تحديث رصيد المستخدم وتسجيل العملية في معاملة واحدة
       await _firestore.runTransaction((transaction) async {
-        // تحديث كود الشحن كمستخدم
         transaction.update(voucherDoc.reference, {
           'isUsed': true,
           'usedBy': userId,
           'usedAt': FieldValue.serverTimestamp(),
         });
 
-        // تحديث رصيد المستخدم
         final userRef = _firestore.collection('users').doc(userId);
         final userSnapshot = await transaction.get(userRef);
-        
+
         if (!userSnapshot.exists) {
           throw 'المستخدم غير موجود';
         }
 
-        final currentBalance = (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
+        final currentBalance =
+            (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
         final newBalance = currentBalance + amount;
 
         transaction.update(userRef, {
@@ -164,7 +154,6 @@ class WalletController extends GetxController {
           'lastUpdated': FieldValue.serverTimestamp(),
         });
 
-        // إضافة سجل العملية
         final transactionRef = _firestore.collection('transactions').doc();
         transaction.set(transactionRef, {
           'userId': userId,
@@ -180,31 +169,28 @@ class WalletController extends GetxController {
         });
       });
 
-      // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
-        _authController.currentUser.value!.balance = 
+        _authController.currentUser.value!.balance =
             _authController.currentUser.value!.balance + amount;
         _authController.currentUser.refresh();
       }
 
-      // تحديث قائمة العمليات
       refreshTransactions();
 
       Get.snackbar(
         'تم بنجاح',
-        'تم إضافة ${amount.toStringAsFixed(2)} ج.م إلى رصيدك',
-        snackPosition: SnackPosition.BOTTOM,
+        'تم إضافة ${amount.toStringAsFixed(2)} د.ع إلى رصيدك',
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.green,
         colorText: Colors.white,
         duration: const Duration(seconds: 3),
       );
-
     } catch (e) {
       logger.e('خطأ في استخدام كود الشحن: $e');
       Get.snackbar(
         'خطأ',
         'فشل في استخدام كود الشحن. يرجى المحاولة مرة أخرى',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -213,7 +199,6 @@ class WalletController extends GetxController {
     }
   }
 
-  /// إنشاء عملية دفع للرحلة
   Future<bool> createTripPayment({
     required String tripId,
     required double amount,
@@ -227,18 +212,19 @@ class WalletController extends GetxController {
     try {
       final userRef = _firestore.collection('users').doc(userId);
       final userSnapshot = await userRef.get();
-      
+
       if (!userSnapshot.exists) {
         throw 'المستخدم غير موجود';
       }
 
-      final currentBalance = (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
-      
+      final currentBalance =
+          (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
+
       if (currentBalance < amount) {
         Get.snackbar(
           'رصيد غير كافي',
           'رصيدك الحالي غير كافي لدفع تكلفة الرحلة',
-          snackPosition: SnackPosition.BOTTOM,
+          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.red,
           colorText: Colors.white,
         );
@@ -248,13 +234,11 @@ class WalletController extends GetxController {
       await _firestore.runTransaction((transaction) async {
         final newBalance = currentBalance - amount;
 
-        // تحديث رصيد المستخدم
         transaction.update(userRef, {
           'balance': newBalance,
           'lastUpdated': FieldValue.serverTimestamp(),
         });
 
-        // إضافة سجل العملية
         final transactionRef = _firestore.collection('transactions').doc();
         transaction.set(transactionRef, {
           'userId': userId,
@@ -269,24 +253,21 @@ class WalletController extends GetxController {
         });
       });
 
-      // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
-        _authController.currentUser.value!.balance = 
+        _authController.currentUser.value!.balance =
             (_authController.currentUser.value!.balance ?? 0.0) - amount;
         _authController.currentUser.refresh();
       }
 
-      // تحديث قائمة العمليات
       refreshTransactions();
 
       return true;
-
     } catch (e) {
       logger.e('خطأ في إنشاء عملية الدفع: $e');
       Get.snackbar(
         'خطأ في الدفع',
         'فشل في دفع تكلفة الرحلة',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
@@ -296,7 +277,6 @@ class WalletController extends GetxController {
     }
   }
 
-  /// إنشاء عملية استرداد
   Future<void> createRefund({
     required String tripId,
     required double amount,
@@ -309,21 +289,20 @@ class WalletController extends GetxController {
       await _firestore.runTransaction((transaction) async {
         final userRef = _firestore.collection('users').doc(userId);
         final userSnapshot = await transaction.get(userRef);
-        
+
         if (!userSnapshot.exists) {
           throw 'المستخدم غير موجود';
         }
 
-        final currentBalance = (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
+        final currentBalance =
+            (userSnapshot.data()?['balance'] ?? 0.0).toDouble();
         final newBalance = currentBalance + amount;
 
-        // تحديث رصيد المستخدم
         transaction.update(userRef, {
           'balance': newBalance,
           'lastUpdated': FieldValue.serverTimestamp(),
         });
 
-        // إضافة سجل العملية
         final transactionRef = _firestore.collection('transactions').doc();
         transaction.set(transactionRef, {
           'userId': userId,
@@ -339,48 +318,42 @@ class WalletController extends GetxController {
         });
       });
 
-      // تحديث الرصيد في الذاكرة
       if (_authController.currentUser.value != null) {
-        _authController.currentUser.value!.balance = 
+        _authController.currentUser.value!.balance =
             _authController.currentUser.value!.balance + amount;
         _authController.currentUser.refresh();
       }
 
-      // تحديث قائمة العمليات
       refreshTransactions();
 
       Get.snackbar(
         'تم الاسترداد',
-        'تم إضافة ${amount.toStringAsFixed(2)} ج.م إلى رصيدك',
-        snackPosition: SnackPosition.BOTTOM,
+        'تم إضافة ${amount.toStringAsFixed(2)} د.ع إلى رصيدك',
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.green,
         colorText: Colors.white,
       );
-
     } catch (e) {
       logger.e('خطأ في عملية الاسترداد: $e');
       Get.snackbar(
         'خطأ',
         'فشل في عملية الاسترداد',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.red,
         colorText: Colors.white,
       );
     }
   }
 
-  /// فحص الرصيد الكافي
   bool hasEnoughBalance(double amount) {
     final currentBalance = _authController.currentUser.value?.balance ?? 0.0;
     return currentBalance >= amount;
   }
 
-  /// الحصول على الرصيد الحالي
   double get currentBalance {
     return _authController.currentUser.value?.balance ?? 0.0;
   }
 
-  /// فحص صحة كود الشحن (بدون استخدام)
   Future<VoucherModel?> validateVoucher(String voucherCode) async {
     try {
       final voucherQuery = await _firestore
@@ -401,10 +374,8 @@ class WalletController extends GetxController {
       return null;
     }
   }
-
 }
 
-/// نموذج كود الشحن
 class VoucherModel {
   final String id;
   final String code;

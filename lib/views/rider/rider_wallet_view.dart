@@ -36,12 +36,8 @@ class RiderWalletView extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // بطاقة الرصيد
               _buildBalanceCard(authController),
-
               const SizedBox(height: 24),
-
-              // تحذير الرصيد المنخفض
               Obx(() {
                 final balance =
                     authController.currentUser.value?.balance ?? 0.0;
@@ -50,15 +46,9 @@ class RiderWalletView extends StatelessWidget {
                 }
                 return const SizedBox.shrink();
               }),
-
               const SizedBox(height: 24),
-
-              // أزرار الإجراءات
               _buildActionButtons(),
-
               const SizedBox(height: 24),
-
-              // سجل العمليات
               _buildTransactionHistory(walletController),
             ],
           ),
@@ -67,7 +57,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// تحذير الرصيد المنخفض
   Widget _buildLowBalanceWarning() {
     return Container(
       width: double.infinity,
@@ -151,7 +140,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// بطاقة الرصيد
   Widget _buildBalanceCard(AuthController authController) {
     return Container(
       width: double.infinity,
@@ -209,7 +197,7 @@ class RiderWalletView extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Obx(() => Text(
-                '${(authController.currentUser.value?.balance ?? 0.0).toStringAsFixed(2)} ج.م',
+                '${(authController.currentUser.value?.balance ?? 0.0).toStringAsFixed(2)} د.ع',
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 36,
@@ -231,7 +219,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// أزرار الإجراءات
   Widget _buildActionButtons() {
     return Row(
       children: [
@@ -290,7 +277,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// سجل العمليات
   Widget _buildTransactionHistory(WalletController walletController) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,7 +352,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// عنصر العملية
   Widget _buildTransactionItem(TransactionModel transaction) {
     final isPositive = transaction.type == 'credit';
     final DateFormat formatter = DateFormat('dd/MM/yyyy - HH:mm');
@@ -542,9 +527,7 @@ class RiderWalletView extends StatelessWidget {
     }
   }
 
-  /// التمرير إلى قسم العمليات
   void _scrollToTransactions() {
-    // يمكن تنفيذ التمرير التلقائي هنا
     Get.snackbar(
       'سجل العمليات',
       'تم التمرير إلى قسم العمليات',
@@ -553,7 +536,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// عرض نافذة إضافة رصيد
   void _showAddBalanceDialog() {
     Get.bottomSheet(
       Container(
@@ -590,8 +572,6 @@ class RiderWalletView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // كود الشحن
             _buildPaymentMethod(
               icon: Icons.confirmation_number,
               title: 'كود الشحن',
@@ -602,31 +582,18 @@ class RiderWalletView extends StatelessWidget {
                 _showVoucherDialog();
               },
             ),
-
             const SizedBox(height: 12),
-
-            // زين كاش (قريباً)
             _buildPaymentMethod(
               icon: Icons.payment,
               title: 'زين كاش',
-              subtitle: 'قريباً - دفع آمن وسريع',
+              subtitle: 'دفع آمن وسريع',
               color: Colors.purple,
-              isComingSoon: true,
               onTap: () {
                 Get.back();
-                Get.snackbar(
-                  'قريباً',
-                  'سيتم تفعيل زين كاش قريباً',
-                  snackPosition: SnackPosition.BOTTOM,
-                  backgroundColor: Colors.purple,
-                  colorText: Colors.white,
-                );
+                _showZainCashDialog();
               },
             ),
-
             const SizedBox(height: 12),
-
-            // بطاقة ائتمان (قريباً)
             _buildPaymentMethod(
               icon: Icons.credit_card,
               title: 'بطاقة ائتمان',
@@ -644,7 +611,6 @@ class RiderWalletView extends StatelessWidget {
                 );
               },
             ),
-
             const SizedBox(height: 24),
           ],
         ),
@@ -653,7 +619,6 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// طريقة الدفع
   Widget _buildPaymentMethod({
     required IconData icon,
     required String title,
@@ -744,12 +709,11 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// عرض نافذة كود الشحن
   void _showVoucherDialog() {
     final voucherController = TextEditingController();
     final walletController = Get.find<WalletController>();
 
-    const fixedWhatsappNumber = '+201013280650'; // الرقم ثابت
+    const fixedWhatsappNumber = '+9647712998898';
 
     Get.dialog(
       Dialog(
@@ -760,7 +724,6 @@ class RiderWalletView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // أيقونة في الأعلى
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -774,7 +737,6 @@ class RiderWalletView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-
               const Text(
                 'إدخال كود الشحن',
                 style: TextStyle(
@@ -784,8 +746,6 @@ class RiderWalletView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-
-              // حقل الكود
               TextField(
                 controller: voucherController,
                 decoration: InputDecoration(
@@ -806,8 +766,6 @@ class RiderWalletView extends StatelessWidget {
                 inputFormatters: [UpperCaseTextFormatter()],
               ),
               const SizedBox(height: 20),
-
-              // زر واتساب ثابت
               OutlinedButton.icon(
                 onPressed: () => _openWhatsAppChat(fixedWhatsappNumber),
                 icon: const Icon(Icons.chat_outlined, color: Colors.green),
@@ -822,8 +780,6 @@ class RiderWalletView extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // الأزرار السفلية
               Row(
                 children: [
                   Expanded(
@@ -848,9 +804,7 @@ class RiderWalletView extends StatelessWidget {
                                   }
                                 },
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 2), // 👈 قللت البادينج الأفقي
-
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
                             backgroundColor:
                                 const Color.fromARGB(255, 198, 243, 33),
                             foregroundColor: Colors.white,
@@ -871,9 +825,8 @@ class RiderWalletView extends StatelessWidget {
                                 )
                               : const Text(
                                   'استخدام الكود',
-                                  softWrap: false, // يمنع الكسر لسطر جديد
-                                  overflow: TextOverflow
-                                      .ellipsis, // لو طويل يجيب "..."
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
                                   style: TextStyle(fontSize: 14),
                                 ),
                         )),
@@ -887,11 +840,112 @@ class RiderWalletView extends StatelessWidget {
     );
   }
 
-  /// فتح محادثة واتساب مباشرة مع رقم مُدخل
+  void _showZainCashDialog() {
+    final amountController = TextEditingController();
+
+    Get.dialog(
+      Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.purple.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.payment,
+                  size: 40,
+                  color: Colors.purple,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'الدفع بزين كاش',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: 'المبلغ بالدينار العراقي',
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 12,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Get.back(),
+                      child: const Text('إلغاء'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        final amount = double.tryParse(amountController.text);
+                        if (amount != null && amount >= 5000) {
+                          Get.back();
+                          Get.snackbar(
+                            'جاري المعالجة',
+                            'سيتم فتح صفحة الدفع قريباً',
+                            snackPosition: SnackPosition.BOTTOM,
+                            backgroundColor: Colors.purple,
+                            colorText: Colors.white,
+                          );
+                        } else {
+                          Get.snackbar(
+                            'خطأ',
+                            'الحد الأدنى 5000 د.ع',
+                            snackPosition: SnackPosition.BOTTOM,
+                            backgroundColor: Colors.red,
+                            colorText: Colors.white,
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('متابعة الدفع'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _openWhatsAppChat(String rawPhone) async {
     String phoneNumber = rawPhone.replaceAll(' ', '');
 
-    // لازم تشيل علامة +
     if (phoneNumber.startsWith('+')) {
       phoneNumber = phoneNumber.substring(1);
     }
@@ -925,7 +979,6 @@ class RiderWalletView extends StatelessWidget {
   }
 }
 
-/// تحويل النص إلى أحرف كبيرة
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
@@ -939,13 +992,12 @@ class UpperCaseTextFormatter extends TextInputFormatter {
   }
 }
 
-/// نموذج العملية المالية
 class TransactionModel {
   final String id;
   final String userId;
   final double amount;
-  final String type; // credit, debit, trip_payment, refund
-  final String status; // pending, completed, failed, cancelled
+  final String type;
+  final String status;
   final String? description;
   final DateTime createdAt;
   final Map<String, dynamic>? metadata;

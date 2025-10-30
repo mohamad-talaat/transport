@@ -29,7 +29,7 @@ class RiderTripDetailsView extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text('المسافة: ${trip.distance.toStringAsFixed(1)} كم'),
                   Text('المدة: ${trip.estimatedDuration} دقيقة'),
-                  Text('التكلفة: ${trip.fare.toStringAsFixed(2)} ج.م'),
+                  Text('التكلفة: ${trip.fare.toStringAsFixed(2)} د.ع'),
                   const Spacer(),
                   Align(
                     alignment: Alignment.bottomCenter,

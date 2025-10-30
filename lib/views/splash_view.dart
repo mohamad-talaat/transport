@@ -1,274 +1,122 @@
+// ملف: views/splash_view.dart
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
+import 'package:transport_app/controllers/trip_controller.dart';
+import 'package:transport_app/controllers/driver_controller.dart';
+import 'package:transport_app/main.dart';
 import 'package:transport_app/routes/app_routes.dart';
-
-import '../main.dart';
-import '../models/user_model.dart';
+import 'package:transport_app/models/user_model.dart';
+import 'package:transport_app/models/trip_model.dart'; // ✅ إضافة import لـ TripStatus
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
 
   @override
-  _SplashViewState createState() => _SplashViewState();
+  State<SplashView> createState() => _SplashViewState();
 }
 
-class _SplashViewState extends State<SplashView> with TickerProviderStateMixin {
-  late AnimationController _logoController;
-  late AnimationController _textController;
-  late Animation<double> _logoAnimation;
-  late Animation<double> _textAnimation;
-  late Animation<double> _fadeAnimation;
-
-  bool _hasNavigated = false;
+class _SplashViewState extends State<SplashView> {
+  // نستخدم Get.find() لأن الـ Bindings قامت بإنشائها بالفعل
+  final AuthController authController = Get.find();
+  final TripController tripController = Get.find();
+  final DriverController driverController = Get.find();
 
   @override
   void initState() {
     super.initState();
-    _initAnimations();
-    _initializeApp();
-  }
-
-  void _initAnimations() {
-    _logoController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _textController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _logoAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _logoController,
-      curve: Curves.elasticOut,
-    ));
-
-    _textAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _textController,
-      curve: Curves.easeOut,
-    ));
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _logoController,
-      curve: const Interval(0.0, 0.5, curve: Curves.easeIn),
-    ));
-
-    _logoController.forward();
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        _textController.forward();
-      }
+    // نستخدم addPostFrameCallback لضمان أن كل شيء تم بناؤه قبل التنقل
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _decideNextRoute();
     });
   }
+Future<void> _decideNextRoute() async {
+  await Future.delayed(const Duration(seconds: 2));
 
-  Future<void> _initializeApp() async {
-    try {
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (!mounted || _hasNavigated) return;
-
-      await _checkUserStatus();
-    } catch (e) {
-      logger.t('خطأ في تهيئة التطبيق: $e');
-      if (!_hasNavigated && mounted) {
-        _navigateToUserTypeSelection();
-      }
-    }
+  // ✅ انتظار تحميل بيانات المستخدم من GetStorage
+  await authController.loadLoginState();
+  
+  if (!authController.isLoggedIn.value || authController.currentUser.value == null) {
+    Get.offAllNamed(AppRoutes.USER_TYPE_SELECTION);
+    return;
   }
 
-  Future<void> _checkUserStatus() async {
-    if (_hasNavigated || !mounted) return;
+  final user = authController.currentUser.value!;
 
-    try {
-      AuthController authController;
-
-      if (Get.isRegistered<AuthController>()) {
-        authController = Get.find<AuthController>();
+  try {
+    if (user.userType == UserType.rider) {
+      // ✅ تحميل الرحلة النشطة للراكب
+      await tripController.checkActiveTrip();
+      final activeTrip = tripController.activeTrip.value;
+      
+      if (activeTrip != null && 
+          activeTrip.status != TripStatus.cancelled && 
+          activeTrip.status != TripStatus.completed) {
+        logger.i('📦 الراكب: رحلة نشطة - الانتقال إلى تتبع الرحلة');
+        Get.offAllNamed(AppRoutes.RIDER_TRIP_TRACKING);
       } else {
-        authController = Get.put(AuthController(), permanent: true);
-        await Future.delayed(const Duration(milliseconds: 100));
+        logger.i('🏠 الراكب: لا توجد رحلة نشطة - الانتقال للهوم');
+        Get.offAllNamed(AppRoutes.Rider_TYPE_SELECTION);
       }
-
-      await Future.delayed(const Duration(milliseconds: 300));
-      final user = authController.currentUser.value;
-
-      if (authController.isLoggedIn.value && user != null) {
-        if (user.userType == UserType.rider) {
-          _navigateToRoute(AppRoutes.RIDER_HOME);
-        } else {
-          _navigateToRoute(AppRoutes.DRIVER_HOME);
-        }
+    } 
+    else if (user.userType == UserType.driver) {
+      // ✅ فحص حالة الدفع المعلق أولاً
+      final paymentLock = driverController.storage.read('paymentLock');
+      if (paymentLock != null && paymentLock['status'] == 'pending') {
+        logger.i('💳 دفع معلق - الانتقال إلى صفحة الدفع');
+        await driverController.surePayment();
+        return; // surePayment() ستوجه إلى الصفحة الصحيحة
+      }
+      
+      // ✅ تحميل الرحلة النشطة للسائق
+      await driverController.checkActiveTrip();
+      final currentTrip = driverController.currentTrip.value;
+      
+      if (currentTrip != null && 
+          currentTrip.status != TripStatus.cancelled && 
+          currentTrip.status != TripStatus.completed) {
+        logger.i('📦 السائق: رحلة نشطة - الانتقال إلم تتبع الرحلة');
+        Get.offAllNamed(AppRoutes.DRIVER_TRIP_TRACKING);
       } else {
-        _navigateToUserTypeSelection();
-      }
-    } catch (e) {
-      logger.t('خطأ في فحص حالة المستخدم: $e');
-      if (!_hasNavigated && mounted) {
-        _navigateToUserTypeSelection();
+        logger.i('🏠 السائق: لا توجد رحلة نشطة - الانتقال للهوم');
+        Get.offAllNamed(AppRoutes.DRIVER_HOME);
       }
     }
-  }
-
-  void _navigateToUserTypeSelection() {
-    _navigateToRoute(AppRoutes.USER_TYPE_SELECTION);
-  }
-
-  void _navigateToRoute(String route) {
-    if (_hasNavigated || !mounted) return;
-
-    _hasNavigated = true;
-
-    if (Get.currentRoute != route) {
-      Get.offAllNamed(route);
+  } catch (e) {
+    logger.e('❌ خطأ في تحديد المسار: $e');
+    // ✅ في حالة الخطأ، انتقل إلى الصفحة الرئيسية بناءً على نوع المستخدم
+    if (user.userType == UserType.rider) {
+      Get.offAllNamed(AppRoutes.Rider_TYPE_SELECTION);
+    } else if (user.userType == UserType.driver) {
+      Get.offAllNamed(AppRoutes.DRIVER_HOME);
+    } else {
+      Get.offAllNamed(AppRoutes.USER_TYPE_SELECTION);
     }
   }
+}
 
-  @override
-  void dispose() {
-    _logoController.dispose();
-    _textController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.orange.shade400,
-              Colors.orange.shade600,
-              Colors.orange.shade800,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedBuilder(
-                animation: _logoAnimation,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _logoAnimation.value,
-                    child: FadeTransition(
-                      opacity: _fadeAnimation,
-                      child: Container(
-                        width: 110,
-                        height: 110,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 15,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Icon(
-                          Icons.local_taxi,
-                          size: 60,
-                          color: Colors.orange.shade500,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 35),
-
-              AnimatedBuilder(
-                animation: _textAnimation,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(0, 40 * (1 - _textAnimation.value)),
-                    child: Opacity(
-                      opacity: _textAnimation.value,
-                      child:   Column(
-                        children: [
-                          Text(
-                            'تكسي البصرة',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                          //    color: Colors.white,
-                              color: Colors.brown[700] , 
-
-                              letterSpacing: 1.3,
-                            ),
-                          ),
-                          SizedBox(height: 10),
-                          Text(
-                            'رحلتك تبدأ هنا',
-                            style: TextStyle(
-                              fontSize: 18,
-                             // color: Colors.white70,
-                              fontWeight: FontWeight.w400,
-                              color: Colors.grey.shade800
-
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-
-              const SizedBox(height: 90),
-
-              AnimatedBuilder(
-                animation: _textAnimation,
-                builder: (context, child) {
-                  return Opacity(
-                    opacity: _textAnimation.value,
-                    child: Column(
-                      children: [
-                        SizedBox(
-                          width: 40,
-                          height: 40,
-                          child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                            strokeWidth: 3,
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const Text(
-                          'جاري التحميل...',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white70,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
+      backgroundColor: Colors.orange, // لون الخلفية
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon(Icons.local_taxi, color: Colors.white, size: 80),
+            // t.png
+            Image.asset("assets/images/t.png", width: 140, height: 140),
+            const SizedBox(height: 20),
+            const Text("تكسي البصرة",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 40),
+            const CircularProgressIndicator(color: Colors.white),
+          ],
         ),
       ),
     );

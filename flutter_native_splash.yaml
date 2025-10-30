@@ -1,0 +1,22 @@
+flutter_native_splash:
+  # 🎨 اللون الأساسي للخلفية (برتقالي)
+  color: "#FFA500"
+
+  # 🖼️ اللوجو اللي في المنتصف
+  image: assets/images/tt.png
+
+  # 🌙 الوضع الليلي
+  color_dark: "#FFA500"
+  image_dark: assets/images/tt.png
+
+  # 📱 دعم Android 12 وما فوق
+  android_12:
+    image: assets/images/tt.png
+    icon_background_color: "#FFA500"
+    image_dark: assets/images/tt.png
+    icon_background_color_dark: "#FFA500"
+  # 🍏 دعم iOS بنفس الإعدادات
+  ios: true
+
+  # 🌐 تعطيل الويب (اختياري)
+  web: false

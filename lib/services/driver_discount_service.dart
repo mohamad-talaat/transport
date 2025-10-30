@@ -16,7 +16,7 @@ class DriverDiscountService extends GetxService {
   final RxBool isLoading = false.obs;
   final RxList<DiscountCodeModel> usedDiscountCodes = <DiscountCodeModel>[].obs;
 
-  /// استخدام كود الخصم
+  
   Future<Map<String, dynamic>> redeemDiscountCode(String code) async {
     if (code.trim().isEmpty) {
       return {
@@ -36,7 +36,7 @@ class DriverDiscountService extends GetxService {
     isLoading.value = true;
 
     try {
-      // البحث عن كود الخصم في قاعدة البيانات
+      
       final discountQuery = await _firestore
           .collection('discount_codes')
           .where('code', isEqualTo: code.toUpperCase())
@@ -57,7 +57,7 @@ class DriverDiscountService extends GetxService {
       final discountCode =
           DiscountCodeModel.fromMap(discountData, discountDoc.id);
 
-      // التحقق من صلاحية الكود
+      
       if (!discountCode.isValid) {
         return {
           'success': false,
@@ -65,7 +65,7 @@ class DriverDiscountService extends GetxService {
         };
       }
 
-      // التحقق من تاريخ انتهاء الصلاحية
+      
       if (DateTime.now().isAfter(discountCode.expiryDate)) {
         return {
           'success': false,
@@ -73,16 +73,16 @@ class DriverDiscountService extends GetxService {
         };
       }
 
-      // تحديث كود الخصم كمستخدم وتسجيل العملية في معاملة واحدة
+      
       await _firestore.runTransaction((transaction) async {
-        // تحديث كود الخصم كمستخدم
+        
         transaction.update(discountDoc.reference, {
           'isUsed': true,
           'usedBy': userId,
           'usedAt': FieldValue.serverTimestamp(),
         });
 
-        // تحديث رصيد السائق
+        
         final userRef = _firestore.collection('users').doc(userId);
         final userSnapshot = await transaction.get(userRef);
 
@@ -100,7 +100,7 @@ class DriverDiscountService extends GetxService {
           'lastUpdated': FieldValue.serverTimestamp(),
         });
 
-        // إضافة سجل العملية
+        
         final transactionRef = _firestore.collection('transactions').doc();
         transaction.set(transactionRef, {
           'userId': userId,
@@ -117,7 +117,7 @@ class DriverDiscountService extends GetxService {
         });
       });
 
-      // تحديث الرصيد في الذاكرة
+      
       if (_authController.currentUser.value != null) {
         _authController.currentUser.value!.balance =
             _authController.currentUser.value!.balance +
@@ -125,7 +125,7 @@ class DriverDiscountService extends GetxService {
         _authController.currentUser.refresh();
       }
 
-      // إضافة الكود لقائمة الأكواد المستخدمة
+      
       usedDiscountCodes.insert(0, discountCode);
       if (usedDiscountCodes.length > 10) {
         usedDiscountCodes.removeLast();
@@ -134,7 +134,7 @@ class DriverDiscountService extends GetxService {
       return {
         'success': true,
         'message':
-            'تم إضافة ${discountCode.discountAmount.toStringAsFixed(2)} ج.م إلى رصيدك',
+            'تم إضافة ${discountCode.discountAmount.toStringAsFixed(2)} د.ع إلى رصيدك',
         'amount': discountCode.discountAmount,
         'code': discountCode.code,
       };
@@ -149,7 +149,7 @@ class DriverDiscountService extends GetxService {
     }
   }
 
-  /// تحميل الأكواد المستخدمة
+  
   Future<void> loadUsedDiscountCodes() async {
     final userId = _authController.currentUser.value?.id;
     if (userId == null) return;
@@ -175,24 +175,24 @@ class DriverDiscountService extends GetxService {
     }
   }
 
-  /// طلب كود خصم جديد
+  
   void requestNewDiscountCode() async {
-    const phoneNumber = '+201013280650'; // رقم واتساب الدعم
+    const phoneNumber = '+9647712998898'; 
     const message = 'مرحباً، أريد طلب كود خصم جديد للمحفظة الإلكترونية (سائق)';
-
-    final url = Uri.parse(
+   final url = Uri.parse(
         'https://wa.me/$phoneNumber?text=${Uri.encodeComponent(message)}');
+
 
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
       } else {
-        // نسخ الرقم للحافظة
+        
         await Clipboard.setData(const ClipboardData(text: phoneNumber));
         Get.snackbar(
           'تم نسخ الرقم',
           'تم نسخ رقم الواتساب: $phoneNumber',
-          snackPosition: SnackPosition.BOTTOM,
+          snackPosition: SnackPosition.TOP,
           backgroundColor: Colors.green,
           colorText: Colors.white,
         );
@@ -201,7 +201,7 @@ class DriverDiscountService extends GetxService {
       Get.snackbar(
         'خطأ',
         'تعذر فتح واتساب. تم نسخ الرقم: $phoneNumber',
-        snackPosition: SnackPosition.BOTTOM,
+        snackPosition: SnackPosition.TOP,
         backgroundColor: Colors.orange,
         colorText: Colors.white,
       );

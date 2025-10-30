@@ -36,7 +36,6 @@ class RiderTripHistoryView extends StatelessWidget {
     );
   }
 
-  /// حالة فارغة
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -69,7 +68,6 @@ class RiderTripHistoryView extends StatelessWidget {
     );
   }
 
-  /// بطاقة الرحلة
   Widget _buildTripCard(TripModel trip) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -86,7 +84,6 @@ class RiderTripHistoryView extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // رأس البطاقة
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -123,13 +120,10 @@ class RiderTripHistoryView extends StatelessWidget {
               ],
             ),
           ),
-
-          // تفاصيل الرحلة
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                // المواقع
                 _buildLocationRow(
                   icon: Icons.my_location,
                   color: Colors.green,
@@ -143,10 +137,7 @@ class RiderTripHistoryView extends StatelessWidget {
                   title: 'إلى',
                   address: trip.destinationLocation.address,
                 ),
-
                 const Divider(height: 32),
-
-                // معلومات الرحلة
                 Row(
                   children: [
                     Expanded(
@@ -167,13 +158,11 @@ class RiderTripHistoryView extends StatelessWidget {
                       child: _buildTripInfo(
                         icon: Icons.attach_money,
                         label: 'التكلفة',
-                        value: '${trip.fare.toStringAsFixed(2)} ج.م',
+                        value: '${trip.fare.toStringAsFixed(2)} د.ع',
                       ),
                     ),
                   ],
                 ),
-
-                // أزرار الإجراءات
                 if (trip.status == TripStatus.completed) ...[
                   const SizedBox(height: 16),
                   Row(
@@ -214,7 +203,6 @@ class RiderTripHistoryView extends StatelessWidget {
     );
   }
 
-  /// صف الموقع
   Widget _buildLocationRow({
     required IconData icon,
     required Color color,
@@ -262,7 +250,6 @@ class RiderTripHistoryView extends StatelessWidget {
     );
   }
 
-  /// معلومات الرحلة
   Widget _buildTripInfo({
     required IconData icon,
     required String label,
@@ -291,7 +278,6 @@ class RiderTripHistoryView extends StatelessWidget {
     );
   }
 
-  /// الحصول على لون حالة الرحلة
   Color _getTripStatusColor(TripStatus status) {
     switch (status) {
       case TripStatus.pending:
@@ -309,7 +295,6 @@ class RiderTripHistoryView extends StatelessWidget {
     }
   }
 
-  /// تنسيق التاريخ
   String _formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date);
@@ -325,12 +310,10 @@ class RiderTripHistoryView extends StatelessWidget {
     }
   }
 
-  /// تقييم الرحلة
   void _rateTrip(TripModel trip) {
     Get.toNamed(AppRoutes.RIDER_TRIP_DETAILS, arguments: trip);
   }
 
-  /// إبلاغ عن مشكلة
   void _reportIssue(TripModel trip) {
     Get.dialog(
       AlertDialog(

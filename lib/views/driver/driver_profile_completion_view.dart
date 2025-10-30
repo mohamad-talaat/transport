@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:transport_app/main.dart';
-import 'package:transport_app/models/driver_model.dart';
-import 'package:transport_app/models/user_model.dart' as user_model;
+import 'package:transport_app/models/user_model.dart';
+import 'package:transport_app/services/unified_image_service.dart';
 import 'package:transport_app/services/user_management_service.dart';
-import 'package:transport_app/services/image_upload_service.dart';
 import 'package:transport_app/controllers/auth_controller.dart';
 import 'package:transport_app/routes/app_routes.dart';
 
@@ -15,10 +14,10 @@ class DriverProfileCompletionView extends StatefulWidget {
 
   @override
   State<DriverProfileCompletionView> createState() =>
-      _DriverProfileCompletionViewState();
+      _DriverProfileCompletionViewEnhancedState();
 }
 
-class _DriverProfileCompletionViewState
+class _DriverProfileCompletionViewEnhancedState
     extends State<DriverProfileCompletionView> {
   final UserManagementService _userService = Get.find<UserManagementService>();
   final ImageUploadService _imageService = Get.find<ImageUploadService>();
@@ -27,20 +26,32 @@ class _DriverProfileCompletionViewState
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
-  final _nationalIdController = TextEditingController();
-  final _drivingLicenseController = TextEditingController();
+
   final _vehicleModelController = TextEditingController();
   final _vehicleColorController = TextEditingController();
-  final _vehiclePlateController = TextEditingController();
+  final _vehicleYearController = TextEditingController();
+  // final _vehiclePlateController = TextEditingController();
   final _emergencyContactController = TextEditingController();
+
+  final _vehicleNumberController = TextEditingController();
+  final _vehicleLetterController = TextEditingController();
+  final _vehicleGovernorateController = TextEditingController();
 
   VehicleType _selectedVehicleType = VehicleType.car;
   bool _isLoading = false;
   bool _isInitializing = true;
-  String? _nationalIdImage;
-  String? _drivingLicenseImage;
+
+  String? _profileImage;
+  String? _nationalIdImageFront;
+  String? _nationalIdImageBack;
+  String? _drivingLicenseImageFront;
+  String? _drivingLicenseImageBack;
   String? _vehicleImage;
-  String? _insuranceImage;
+  // String? _vehicleRegistrationImage;
+  // String? _insuranceImage;
+  String? _ownershipDocumentImage;
+
+  bool _isVehicleOwned = true;
 
   @override
   void initState() {
@@ -48,12 +59,10 @@ class _DriverProfileCompletionViewState
     _initializeDriverData();
   }
 
-  /// تهيئة بيانات السائق
   Future<void> _initializeDriverData() async {
     try {
       setState(() => _isInitializing = true);
 
-      // الحصول على معرف المستخدم الحالي
       final authController = Get.find<AuthController>();
       final userId = authController.currentUser.value?.id;
 
@@ -63,13 +72,11 @@ class _DriverProfileCompletionViewState
         return;
       }
 
-      // تحميل بيانات السائق
       final driver = await _userService.getDriver(userId);
 
       if (driver != null) {
         _loadDriverDataToForm(driver);
       } else {
-        // إنشاء سائق جديد إذا لم يكن موجوداً
         await _createNewDriver(userId, authController.currentUser.value!);
       }
     } catch (e) {
@@ -80,37 +87,48 @@ class _DriverProfileCompletionViewState
     }
   }
 
-  /// تحميل بيانات السائق إلى النموذج
-  void _loadDriverDataToForm(DriverModel driver) {
+  void _loadDriverDataToForm(UserModel driver) {
     _nameController.text = driver.name;
     _phoneController.text = driver.phone;
     _emailController.text = driver.email;
-    _nationalIdController.text = driver.nationalId ?? '';
-    _drivingLicenseController.text = driver.drivingLicense ?? '';
+
     _vehicleModelController.text = driver.vehicleModel ?? '';
     _vehicleColorController.text = driver.vehicleColor ?? '';
-    _vehiclePlateController.text = driver.vehiclePlateNumber ?? '';
+    _vehicleYearController.text = driver.vehicleYear.toString() ?? '';
+    // _vehiclePlateController.text = driver.vehiclePlateNumber ?? '';
+    
+    _vehicleNumberController.text = driver.provinceCode ?? '';
+    _vehicleLetterController.text = driver.plateLetter ?? '';
+    _vehicleGovernorateController.text = driver.provinceName ?? '';
+
     _emergencyContactController.text = driver.emergencyContact ?? '';
 
-    // _profileImage = driver.profileImage;
-    _nationalIdImage = driver.nationalIdImage;
-    _drivingLicenseImage = driver.drivingLicenseImage;
+    _profileImage = driver.profileImage;
+    _nationalIdImageFront = driver.nationalIdImage;
+    _drivingLicenseImageFront = driver.drivingLicenseImage;
     _vehicleImage = driver.vehicleImage;
-    _insuranceImage = driver.insuranceImage;
+    // _insuranceImage = driver.insuranceImage;
+
+    if (driver.additionalData != null) {
+      final additionalData = driver.additionalData!;
+      _nationalIdImageBack = additionalData['nationalIdImageBack'];
+      _drivingLicenseImageBack = additionalData['drivingLicenseImageBack'];
+      // _vehicleRegistrationImage = additionalData['vehicleRegistrationImage'];
+      _ownershipDocumentImage = additionalData['ownershipDocumentImage'];
+      _isVehicleOwned = additionalData['isVehicleOwned'] ?? true;
+    }
 
     if (driver.vehicleType != null) {
       _selectedVehicleType = driver.vehicleType!;
     }
   }
 
-  /// إنشاء سائق جديد
-  Future<void> _createNewDriver(
-      String userId, user_model.UserModel user) async {
+  Future<void> _createNewDriver(String userId, UserModel user) async {
     try {
       final driver = await _userService.createDriver(
         id: userId,
         name: user.name,
-        phone: user.phone,
+        phone: user.phone.trim(),
         email: user.email,
         profileImage: user.profileImage,
       );
@@ -128,41 +146,49 @@ class _DriverProfileCompletionViewState
     _nameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
-    _nationalIdController.dispose();
-    _drivingLicenseController.dispose();
+
     _vehicleModelController.dispose();
     _vehicleColorController.dispose();
-    _vehiclePlateController.dispose();
+    _vehicleYearController.dispose();
+    // _vehiclePlateController.dispose();
+
+    _vehicleNumberController.dispose();
+    _vehicleLetterController.dispose();
+    _vehicleGovernorateController.dispose();
+
+
     _emergencyContactController.dispose();
     super.dispose();
   }
+  
+
 
   Future<void> _pickImage(String imageType) async {
     try {
       final ImagePicker picker = ImagePicker();
       final XFile? image = await picker.pickImage(
         source: ImageSource.gallery,
-        imageQuality: 80,
-        maxWidth: 1024,
-        maxHeight: 1024,
+        imageQuality: 70,
+        maxWidth: 1000,
+        maxHeight: 1000,
       );
 
       if (image != null) {
         setState(() => _isLoading = true);
 
-        // عرض رسالة تقدم
         Get.snackbar(
           'جاري الرفع',
           'يرجى الانتظار...',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.blue,
           colorText: Colors.white,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         );
 
+        // هنا يجب أن تعيد دالة uploadImage الآن URL ImgBB
         final imageUrl = await _imageService.uploadImage(
           imageFile: File(image.path),
-          folder: 'driver_documents',
+          folder: 'driver_documents_iraq', // هذا قد لا يستخدمه ImgBB مباشرة
           fileName: '${imageType}_${DateTime.now().millisecondsSinceEpoch}',
         );
 
@@ -170,30 +196,42 @@ class _DriverProfileCompletionViewState
           setState(() {
             switch (imageType) {
               case 'profile':
-                // _profileImage = imageUrl;
+                _profileImage = imageUrl; // <--- هنا يتم حفظ الـ URL الصحيح الآن
                 break;
-              case 'nationalId':
-                _nationalIdImage = imageUrl;
+              case 'nationalIdFront':
+                _nationalIdImageFront = imageUrl;
                 break;
-              case 'drivingLicense':
-                _drivingLicenseImage = imageUrl;
+              case 'nationalIdBack':
+                _nationalIdImageBack = imageUrl;
+                break;
+              case 'drivingLicenseFront':
+                _drivingLicenseImageFront = imageUrl;
+                break;
+              case 'drivingLicenseBack':
+                _drivingLicenseImageBack = imageUrl;
                 break;
               case 'vehicle':
                 _vehicleImage = imageUrl;
                 break;
-              case 'insurance':
-                _insuranceImage = imageUrl;
+              // case 'vehicleRegistration':
+              //   _vehicleRegistrationImage = imageUrl;
+              //   break;
+              // case 'insurance':
+              //   _insuranceImage = imageUrl;
+              //   break;
+              case 'ownershipDocument':
+                _ownershipDocumentImage = imageUrl;
                 break;
             }
           });
-
+          logger.i('تم رفع الصورة بنجاح. URL: $imageUrl');
           Get.snackbar(
             'نجح',
             'تم رفع الصورة بنجاح',
             snackPosition: SnackPosition.BOTTOM,
             backgroundColor: Colors.green,
             colorText: Colors.white,
-            duration: Duration(seconds: 2),
+            duration: const Duration(seconds: 2),
           );
         } else {
           Get.snackbar(
@@ -246,51 +284,71 @@ class _DriverProfileCompletionViewState
     setState(() => _isLoading = true);
 
     try {
-      // عرض رسالة التحميل
       Get.snackbar(
         'جاري الحفظ',
         'يرجى الانتظار...',
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.blue,
         colorText: Colors.white,
-        duration: Duration(seconds: 2),
+        duration: const Duration(seconds: 2),
       );
+
       final data = {
-        // البيانات الأساسية
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
         'email': _emailController.text.trim(),
-        'nationalId': _nationalIdController.text.trim(),
-        'nationalIdImage': _nationalIdImage,
-        'drivingLicense': _drivingLicenseController.text.trim(),
-        'drivingLicenseImage': _drivingLicenseImage,
+        'profileImage': _profileImage,
+        'nationalIdImage': _nationalIdImageFront,
+        'drivingLicenseImage': _drivingLicenseImageFront,
         'vehicleType': _selectedVehicleType.name,
         'vehicleModel': _vehicleModelController.text.trim(),
         'vehicleColor': _vehicleColorController.text.trim(),
-        'vehiclePlateNumber': _vehiclePlateController.text.trim(),
+        
+
+
+        // 'vehiclePlateNumber': _vehiclePlateController.text.trim(),
+        'provinceCode': _vehicleNumberController.text.trim(),
+        'plateLetter': _vehicleLetterController.text.trim(),
+        'provinceName': _vehicleGovernorateController.text.trim(),
+
         'vehicleImage': _vehicleImage,
-        'insuranceImage': _insuranceImage,
+        // 'vehicleRegistrationImage': _vehicleRegistrationImage,
+'vehicleYear': int.tryParse(_vehicleYearController.text.trim()) ?? 0,
+        // 'insuranceImage': _insuranceImage,
         'emergencyContact': _emergencyContactController.text.trim(),
         'isProfileComplete': _isProfileComplete(),
         'updatedAt': DateTime.now(),
-
-        // إضافة البيانات للتوافق مع العرض
         'additionalData': {
+          'profileImage': _profileImage,
+          'nationalIdImageFront': _nationalIdImageFront,
+          'nationalIdImageBack': _nationalIdImageBack,
+          'drivingLicenseImageFront': _drivingLicenseImageFront,
+          'drivingLicenseImageBack': _drivingLicenseImageBack,
+          // 'vehicleRegistrationImage': _vehicleRegistrationImage,
+          'ownershipDocumentImage': _ownershipDocumentImage,
+          'isVehicleOwned': _isVehicleOwned,
           'carModel': _vehicleModelController.text.trim(),
           'carColor': _vehicleColorController.text.trim(),
-          'carNumber': _vehiclePlateController.text.trim(),
+
+         // 'carNumber': //_vehiclePlateController.text.trim(),
+           "plateNumber": _vehicleNumberController.text.trim(), 
+          "plateLetter": _vehicleLetterController.text.trim(),
+          "provinceName": _vehicleGovernorateController.text.trim(),
+ 
+
+
+
+
           'carType': _selectedVehicleType.name,
-          'licenseNumber': _drivingLicenseController.text.trim(),
-          'licenseImage': _drivingLicenseImage,
-          'idCardImage': _nationalIdImage,
-          'vehicleRegistrationImage': _vehicleImage,
-          'insuranceImage': _insuranceImage,
+          'licenseImage': _drivingLicenseImageFront,
+          'idCardImage': _nationalIdImageFront,
+          // 'vehicleRegistrationImage': _vehicleRegistrationImage,
+          // 'insuranceImage': _insuranceImage,
           'emergencyContact': _emergencyContactController.text.trim(),
           'carImage': _vehicleImage,
         },
       };
 
-      // إذا كان الملف مكتمل، ضع الحالة كـ pending
       if (_isProfileComplete()) {
         data['status'] = 'pending';
         data['isApproved'] = false;
@@ -306,12 +364,11 @@ class _DriverProfileCompletionViewState
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
           colorText: Colors.white,
-          duration: Duration(seconds: 2),
+          duration: const Duration(seconds: 2),
         );
 
-        // التحقق من اكتمال الملف
         final updatedDriver = _userService.currentDriver.value;
-        if (updatedDriver?.isProfileFullyComplete == true) {
+        if (updatedDriver?.isDriverProfileComplete == true) {
           Get.snackbar(
             'ممتاز!',
             'تم اكتمال ملفك الشخصي. سيتم مراجعته من قبل الإدارة قريباً.',
@@ -331,7 +388,6 @@ class _DriverProfileCompletionViewState
           );
         }
 
-        // الانتقال للهوم درايفر بعد حفظ البيانات (سواء مكتمل أم لا)
         Future.delayed(const Duration(seconds: 2), () {
           Get.offAllNamed(AppRoutes.DRIVER_HOME);
         });
@@ -352,7 +408,7 @@ class _DriverProfileCompletionViewState
         snackPosition: SnackPosition.BOTTOM,
         backgroundColor: Colors.red,
         colorText: Colors.white,
-        duration: Duration(seconds: 5),
+        duration: const Duration(seconds: 5),
       );
     } finally {
       setState(() => _isLoading = false);
@@ -360,48 +416,84 @@ class _DriverProfileCompletionViewState
   }
 
   bool _isProfileComplete() {
-    return _nameController.text.isNotEmpty &&
+    final basicComplete = _nameController.text.isNotEmpty &&
         _phoneController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
-        _nationalIdController.text.isNotEmpty &&
-        _nationalIdImage != null &&
-        _drivingLicenseController.text.isNotEmpty &&
-        _drivingLicenseImage != null &&
+        _profileImage != null &&
+        _nationalIdImageFront != null &&
+        _nationalIdImageBack != null &&
+        _drivingLicenseImageFront != null &&
+        _drivingLicenseImageBack != null &&
         _vehicleModelController.text.isNotEmpty &&
         _vehicleColorController.text.isNotEmpty &&
-        _vehiclePlateController.text.isNotEmpty &&
-        _vehicleImage != null &&
-        _insuranceImage != null;
+        _vehicleNumberController.text.isNotEmpty &&
+
+        // _vehiclePlateController.text.isNotEmpty &&
+        _vehicleNumberController.text.isNotEmpty &&
+        _vehicleLetterController.text.isNotEmpty &&
+        _vehicleGovernorateController.text.isNotEmpty &&
+        _vehicleImage != null;
+        // _vehicleRegistrationImage != null &&
+        // _insuranceImage != null;
+
+    if (!_isVehicleOwned && _ownershipDocumentImage == null) {
+      return false;
+    }
+
+    return basicComplete;
   }
 
-  /// الحصول على قائمة الحقول الناقصة
   List<String> _getMissingFields() {
     final List<String> missingFields = [];
 
     if (_nameController.text.isEmpty) missingFields.add('الاسم الكامل');
     if (_phoneController.text.isEmpty) missingFields.add('رقم الهاتف');
     if (_emailController.text.isEmpty) missingFields.add('البريد الإلكتروني');
-    if (_nationalIdController.text.isEmpty) {
-      missingFields.add('رقم الهوية الوطنية');
+    if (_profileImage == null) missingFields.add('الصورة الشخصية');
+
+    if (_nationalIdImageFront == null) {
+      missingFields.add('صورة الهوية (الوجه الأمامي)');
     }
-    if (_nationalIdImage == null) missingFields.add('صورة الهوية الوطنية');
-    if (_drivingLicenseController.text.isEmpty) {
-      missingFields.add('رقم رخصة القيادة');
+    if (_nationalIdImageBack == null) {
+      missingFields.add('صورة الهوية (الوجه الخلفي)');
     }
-    if (_drivingLicenseImage == null) missingFields.add('صورة رخصة القيادة');
+
+    if (_drivingLicenseImageFront == null) {
+      missingFields.add('صورة رخصة القيادة (الوجه الأمامي)');
+    }
+    if (_drivingLicenseImageBack == null) {
+      missingFields.add('صورة رخصة القيادة (الوجه الخلفي)');
+    }
     if (_vehicleModelController.text.isEmpty) {
       missingFields.add('موديل السيارة');
     }
     if (_vehicleColorController.text.isEmpty) missingFields.add('لون السيارة');
-    if (_vehiclePlateController.text.isEmpty) missingFields.add('رقم اللوحة');
+    if (_vehicleYearController.text.isEmpty) missingFields.add('سنة أصدار السيارة');
+
+    // if (_vehiclePlateController.text.isEmpty) missingFields.add('رقم اللوحة');
+    if (_vehicleNumberController.text.isEmpty) {
+      missingFields.add('رقم الرخصة');
+    }
+    if (_vehicleLetterController.text.isEmpty) {
+      missingFields.add('رقم السيارة');
+    }
+    if (_vehicleGovernorateController.text.isEmpty) {
+      missingFields.add('منطقة السيارة');
+    }
     if (_vehicleImage == null) missingFields.add('صورة السيارة');
-    if (_insuranceImage == null) missingFields.add('صورة التأمين');
+    // if (_vehicleRegistrationImage == null) {
+    //   missingFields.add('صورة استمارة السيارة');
+    // }
+    // if (_insuranceImage == null) missingFields.add('صورة التأمين');
+    if (!_isVehicleOwned && _ownershipDocumentImage == null) {
+      missingFields.add('صورة المكاتبة');
+    }
 
     return missingFields;
   }
 
-  Widget _buildImagePicker(
-      String title, String imageType, String? currentImage) {
+  Widget _buildImagePicker(String title, String imageType, String? currentImage,
+      {String? subtitle}) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -412,40 +504,78 @@ class _DriverProfileCompletionViewState
               title,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
             const SizedBox(height: 8),
-            if (currentImage != null)
+            if (currentImage != null) // If there's an image path
+              Column(
+                children: [
+                  // Text('URL الصورة: $currentImage', style: TextStyle(fontSize: 10, color: Colors.blue)),
+                  Container(
+                    height: 120,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: currentImage
+                              .startsWith('http') // Check if it's a web URL
+                          ? Image.network(
+                              currentImage,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                logger.e(
+                                    'خطأ تحميل Image.network لـ $imageType: $error');
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.error,
+                                      color: Colors.red, size: 48),
+                                );
+                              },
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Center(
+                                      child: CircularProgressIndicator()),
+                                );
+                              },
+                            )
+                          : Image.file(
+                              // Otherwise, assume it's a local file path
+                              File(
+                                  currentImage), // Use Image.file for local paths
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                logger.e(
+                                    'خطأ تحميل Image.file لـ $imageType: $error');
+                                return Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.error,
+                                      color: Colors.red, size: 48),
+                                );
+                              },
+                            ),
+                    ),
+                  ),
+                ],
+              )
+            else // If currentImage is null
               Container(
                 height: 120,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    currentImage,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(
-                          Icons.error,
-                          color: Colors.red,
-                          size: 48,
-                        ),
-                      );
-                    },
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        color: Colors.grey.shade200,
-                        child: const Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    },
-                  ),
+                color: Colors.grey.shade100,
+                child: Center(
+                  child: Text('لا توجد صورة لـ $title',
+                      style: const TextStyle(color: Colors.grey)),
                 ),
               ),
             const SizedBox(height: 8),
@@ -483,8 +613,9 @@ class _DriverProfileCompletionViewState
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('إكمال الملف الشخصي'),
+        title: const Text('إكمال الملف الشخصي - العراق'),
         centerTitle: true,
+        backgroundColor: Colors.green.shade700,
       ),
       body: _isInitializing
           ? const Center(
@@ -519,9 +650,8 @@ class _DriverProfileCompletionViewState
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // حالة الملف الشخصي
                       Card(
-                        color: driver.isProfileFullyComplete
+                        color: driver.isDriverProfileComplete
                             ? Colors.green.shade50
                             : Colors.orange.shade50,
                         child: Padding(
@@ -532,22 +662,22 @@ class _DriverProfileCompletionViewState
                               Row(
                                 children: [
                                   Icon(
-                                    driver.isProfileFullyComplete
+                                    driver.isDriverProfileComplete
                                         ? Icons.check_circle
                                         : Icons.warning,
-                                    color: driver.isProfileFullyComplete
+                                    color: driver.isDriverProfileComplete
                                         ? Colors.green
                                         : Colors.orange,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      driver.isProfileFullyComplete
+                                      driver.isDriverProfileComplete
                                           ? 'ملفك الشخصي مكتمل'
                                           : 'يرجى إكمال جميع البيانات المطلوبة',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: driver.isProfileFullyComplete
+                                        color: driver.isDriverProfileComplete
                                             ? Colors.green
                                             : Colors.orange,
                                       ),
@@ -555,7 +685,7 @@ class _DriverProfileCompletionViewState
                                   ),
                                 ],
                               ),
-                              if (!driver.isProfileFullyComplete) ...[
+                              if (!driver.isDriverProfileComplete) ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'الحقول الناقصة: ${_getMissingFields().join(', ')}',
@@ -569,22 +699,19 @@ class _DriverProfileCompletionViewState
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 16),
-
-                      // البيانات الأساسية
                       const Text(
                         'البيانات الأساسية',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-
                       TextFormField(
                         controller: _nameController,
                         decoration: const InputDecoration(
                           labelText: 'الاسم الكامل',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.person),
                         ),
                         validator: (value) {
                           if (value?.isEmpty ?? true) return 'يرجى إدخال الاسم';
@@ -592,13 +719,15 @@ class _DriverProfileCompletionViewState
                         },
                       ),
                       const SizedBox(height: 8),
-
                       TextFormField(
                         controller: _phoneController,
                         decoration: const InputDecoration(
                           labelText: 'رقم الهاتف',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.phone),
+                          hintText: '+964xxxxxxxxx',
                         ),
+                        keyboardType: TextInputType.phone,
                         validator: (value) {
                           if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال رقم الهاتف';
@@ -607,13 +736,14 @@ class _DriverProfileCompletionViewState
                         },
                       ),
                       const SizedBox(height: 8),
-
                       TextFormField(
                         controller: _emailController,
                         decoration: const InputDecoration(
                           labelText: 'البريد الإلكتروني',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.email),
                         ),
+                        keyboardType: TextInputType.emailAddress,
                         validator: (value) {
                           if (value?.isEmpty ?? true) {
                             return 'يرجى إدخال البريد الإلكتروني';
@@ -624,69 +754,91 @@ class _DriverProfileCompletionViewState
                           return null;
                         },
                       ),
-
+                      const SizedBox(height: 8),
+                      _buildImagePicker(
+                        'الصورة الشخصية',
+                        'profile',
+                        _profileImage,
+                        subtitle: 'صورة واضحة لوجهك بدون نظارة شمسية',
+                      ),
                       const SizedBox(height: 24),
-
-                      // المستندات الشخصية
-                      const Text(
-                        'المستندات الشخصية',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold),
+                      const SizedBox(height: 8),
+                      _buildImagePicker(
+                        'صورة الهوية الوطنية (الوجه الأمامي)',
+                        'nationalIdFront',
+                        _nationalIdImageFront,
+                        subtitle: 'صورة واضحة للوجه الأمامي للهوية',
                       ),
-                      const SizedBox(height: 8),
-
-                      TextFormField(
-                        controller: _nationalIdController,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم الهوية الوطنية',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value?.isEmpty ?? true) {
-                            return 'يرجى إدخال رقم الهوية';
-                          }
-                          return null;
-                        },
+                      _buildImagePicker(
+                        'صورة الهوية الوطنية (الوجه الخلفي)',
+                        'nationalIdBack',
+                        _nationalIdImageBack,
+                        subtitle: 'صورة واضحة للوجه الخلفي للهوية',
                       ),
-                      const SizedBox(height: 8),
-
-                      _buildImagePicker('صورة الهوية الوطنية', 'nationalId',
-                          _nationalIdImage),
-                      const SizedBox(height: 8),
-
-                      TextFormField(
-                        controller: _drivingLicenseController,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم رخصة القيادة',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value?.isEmpty ?? true) {
-                            return 'يرجى إدخال رقم رخصة القيادة';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-
-                      _buildImagePicker('صورة رخصة القيادة', 'drivingLicense',
-                          _drivingLicenseImage),
-
                       const SizedBox(height: 24),
-
-                      // بيانات المركبة
+                      const SizedBox(height: 8),
+                      _buildImagePicker(
+                        'صورة رخصة القيادة (الوجه الأمامي)',
+                        'drivingLicenseFront',
+                        _drivingLicenseImageFront,
+                        subtitle: 'صورة واضحة للوجه الأمامي للرخصة',
+                      ),
+                      _buildImagePicker(
+                        'صورة رخصة القيادة (الوجه الخلفي)',
+                        'drivingLicenseBack',
+                        _drivingLicenseImageBack,
+                        subtitle: 'صورة واضحة للوجه الخلفي للرخصة',
+                      ),
+                      const SizedBox(height: 24),
                       const Text(
                         'بيانات المركبة',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ملكية المركبة',
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              RadioListTile<bool>(
+                                title: const Text('المركبة مملوكة لي'),
+                                value: true,
+                                groupValue: _isVehicleOwned,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _isVehicleOwned = value ?? true;
+                                  });
+                                },
+                              ),
+                              RadioListTile<bool>(
+                                title: const Text('المركبة مستأجرة/غير مملوكة'),
+                                subtitle: const Text('سيتطلب رفع المكاتبة'),
+                                value: false,
+                                groupValue: _isVehicleOwned,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _isVehicleOwned = value ?? true;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
                       DropdownButtonFormField<VehicleType>(
-                        initialValue: _selectedVehicleType,
+                        value: _selectedVehicleType,
                         decoration: const InputDecoration(
                           labelText: 'نوع المركبة',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.directions_car),
                         ),
                         items: VehicleType.values.map((type) {
                           return DropdownMenuItem(
@@ -701,12 +853,13 @@ class _DriverProfileCompletionViewState
                         },
                       ),
                       const SizedBox(height: 8),
-
                       TextFormField(
                         controller: _vehicleModelController,
                         decoration: const InputDecoration(
                           labelText: 'موديل السيارة',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.car_rental),
+                          hintText: 'مثال: تويوتا كورولا ',
                         ),
                         validator: (value) {
                           if (value?.isEmpty ?? true) {
@@ -716,12 +869,31 @@ class _DriverProfileCompletionViewState
                         },
                       ),
                       const SizedBox(height: 8),
+                       TextFormField(
+                        controller: _vehicleYearController,
+                        decoration: const InputDecoration(
+                          labelText: 'سنة الاصدار',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.car_rental),
+                          hintText: 'مثال:2020',
+                        ),
+                     keyboardType: TextInputType.phone,
 
+                        validator: (value) {
+                          if (value?.isEmpty ?? true) {
+                            return 'يرجى إدخال سنةأصدار السيارة';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
                       TextFormField(
                         controller: _vehicleColorController,
                         decoration: const InputDecoration(
                           labelText: 'لون السيارة',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.color_lens),
+                          hintText: 'مثال: أبيض، أسود، رمادي',
                         ),
                         validator: (value) {
                           if (value?.isEmpty ?? true) {
@@ -732,60 +904,197 @@ class _DriverProfileCompletionViewState
                       ),
                       const SizedBox(height: 8),
 
-                      TextFormField(
-                        controller: _vehiclePlateController,
-                        decoration: const InputDecoration(
-                          labelText: 'رقم اللوحة',
-                          border: OutlineInputBorder(),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          border: Border.all(color: Colors.black87, width: 2),
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 4,
+                              offset: const Offset(1, 2),
+                            ),
+                          ],
                         ),
-                        validator: (value) {
-                          if (value?.isEmpty ?? true) {
-                            return 'يرجى إدخال رقم اللوحة';
-                          }
-                          return null;
-                        },
+                        child: Row(
+                          children: [
+                            // أرقام اللوحة
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                controller: _vehicleNumberController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: 'أرقام اللوحة',
+                                  labelStyle: const TextStyle(fontSize: 13),
+                                  filled: true,
+                                  fillColor: Colors.grey[100],
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide:
+                                        const BorderSide(color: Colors.black54),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: const BorderSide(
+                                        color: Colors.blueAccent, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 8),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                        ? 'أدخل الأرقام'
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+
+                            // الحرف (اختياري)
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _vehicleLetterController,
+                                maxLength: 1,
+                                textAlign: TextAlign.center,
+                                textCapitalization:
+                                    TextCapitalization.characters,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: 'حرف',
+                                  counterText: '',
+                                  filled: true,
+                                  fillColor: Colors.grey[100],
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide:
+                                        const BorderSide(color: Colors.black54),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: const BorderSide(
+                                        color: Colors.blueAccent, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+
+                            // المحافظة
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                controller: _vehicleGovernorateController,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16),
+                                decoration: InputDecoration(
+                                  labelText: 'المحافظة',
+                                  labelStyle: const TextStyle(fontSize: 13),
+                                  filled: true,
+                                  fillColor: Colors.grey[100],
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide:
+                                        const BorderSide(color: Colors.black54),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: const BorderSide(
+                                        color: Colors.blueAccent, width: 2),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                      vertical: 10, horizontal: 8),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                        ? 'أدخل المحافظة'
+                                        : null,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+
+                      // TextFormField(
+                      //   controller: _vehiclePlateController,
+                      //   decoration: const InputDecoration(
+                      //     labelText: 'رقم اللوحة',
+                      //     border: OutlineInputBorder(),
+                      //     prefixIcon: Icon(Icons.confirmation_number),
+                      //     hintText: 'رقم اللوحة العراقية',
+                      //   ),
+                      //   validator: (value) {
+                      //     if (value?.isEmpty ?? true) {
+                      //       return 'يرجى إدخال رقم اللوحة';
+                      //     }
+                      //     return null;
+                      //   },
+                      // ),
+
                       const SizedBox(height: 8),
-
                       _buildImagePicker(
-                          'صورة السيارة', 'vehicle', _vehicleImage),
-                      const SizedBox(height: 8),
-
-                      _buildImagePicker(
-                          'صورة التأمين', 'insurance', _insuranceImage),
-
+                        'صورة السيارة',
+                        'vehicle',
+                        _vehicleImage,
+                        subtitle: 'صورة واضحة للسيارة من الخارج',
+                      ),
+                      // _buildImagePicker(
+                      //   'صورة استمارة السيارة',
+                      //   'vehicleRegistration',
+                      //   _vehicleRegistrationImage,
+                      //   subtitle: 'صورة استمارة التسجيل الرسمية للسيارة',
+                      // ),
+                      // _buildImagePicker(
+                      //   'صورة التأمين',
+                      //   'insurance',
+                      //   _insuranceImage,
+                      //   subtitle: 'صورة بوليصة التأمين الساري المفعول',
+                      // ),
+                      if (!_isVehicleOwned) ...[
+                        _buildImagePicker(
+                          'صورة المكاتبة',
+                          'ownershipDocument',
+                          _ownershipDocumentImage,
+                          subtitle:
+                              'مكاتبة من مالك السيارة تسمح لك بالعمل عليها',
+                        ),
+                      ],
                       const SizedBox(height: 24),
-
-                      // بيانات الطوارئ
                       const Text(
                         'بيانات الطوارئ',
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-
                       TextFormField(
                         controller: _emergencyContactController,
                         decoration: const InputDecoration(
                           labelText: 'رقم الطوارئ',
                           border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.emergency),
+                          hintText: 'رقم هاتف للتواصل في الحالات الطارئة',
                         ),
+                        keyboardType: TextInputType.phone,
                       ),
-
                       const SizedBox(height: 32),
-
-                      // زر الحفظ
                       SizedBox(
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                Colors.blue, // لون الخلفية (الأزرق)
-                            foregroundColor: Colors.white, // لون النص/الأيقونات
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                  12), // لو عايز زوايا مدورة
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           onPressed: _isLoading ? null : _saveProfile,
@@ -794,36 +1103,44 @@ class _DriverProfileCompletionViewState
                                   color: Colors.white)
                               : const Text(
                                   'حفظ البيانات',
-                                  style: TextStyle(fontSize: 16),
+                                  style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
                                 ),
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // ملاحظة مهمة
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
+                          color: Colors.green.shade50,
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.shade200),
+                          border: Border.all(color: Colors.green.shade200),
                         ),
-                        child: const Column(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'ملاحظة مهمة:',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue),
+                            Row(
+                              children: [
+                                Icon(Icons.info, color: Colors.green.shade700),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'ملاحظة مهمة:',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green),
+                                ),
+                              ],
                             ),
-                            SizedBox(height: 8),
-                            Text(
+                            const SizedBox(height: 8),
+                            const Text(
                               '• يجب إكمال جميع البيانات المطلوبة\n'
-                              '• سيتم مراجعة ملفك من قبل الإدارة\n'
+                              '• سيتم مراجعة ملفك من قبل الإدارة خلال 24-48 ساعة\n'
                               '• لن تتمكن من استقبال الطلبات حتى تتم الموافقة\n'
-                              '• يمكنك تحديث البيانات في أي وقت',
-                              style: TextStyle(color: Colors.blue),
+                              '• يمكنك تحديث البيانات في أي وقت\n'
+                              '• جميع الصور يجب أن تكون واضحة وحديثة\n'
+                              '• المستندات يجب أن تكون صالحة وغير منتهية الصلاحية',
+                              style: TextStyle(color: Colors.green),
                             ),
                           ],
                         ),

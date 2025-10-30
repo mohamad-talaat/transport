@@ -12,7 +12,7 @@ class DiscountCodeModel {
   final DateTime createdAt;
   final String createdBy;
   final String? description;
-  final List<String> applicableUserIds; // المستخدمين المصرح لهم باستخدام الكود
+  final List<String> applicableUserIds;
 
   DiscountCodeModel({
     required this.id,
@@ -92,12 +92,10 @@ class DiscountCodeModel {
     );
   }
 
-  /// حساب قيمة الخصم
   double calculateDiscount(double originalAmount) {
     return discountAmount;
   }
 
-  /// التحقق من صلاحية الكود
   bool get isValid {
     if (!isActive) return false;
     if (currentUses >= maxUses) return false;
@@ -105,7 +103,6 @@ class DiscountCodeModel {
     return true;
   }
 
-  /// التحقق من إمكانية استخدام الكود من قبل مستخدم معين
   bool canBeUsedBy(String userId) {
     if (!isValid) return false;
     if (applicableUserIds.isNotEmpty && !applicableUserIds.contains(userId)) {

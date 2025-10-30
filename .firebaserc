@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "transport-app-com"
-  }
+    "default": "transporter-app-59aac",
+    "firebase init functions": "transporter-app-59aac"
+  },
+  "targets": {},
+  "etags": {}
 }
